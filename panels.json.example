@@ -1,0 +1,19 @@
+{
+  "panels": {},
+  "grid": {
+    "linksboven": null,
+    "rechtsboven": null,
+    "linksonder": null,
+    "rechtsonder": null
+  },
+  "settings": {
+    "scan_timeout": 10.0,
+    "send_timeout": 30.0,
+    "send_delay": 0.15,
+    "retry_count": 3,
+    "panel_delay": 1.5,
+    "server_host": "0.0.0.0",
+    "server_port": 8000
+  }
+}
+
