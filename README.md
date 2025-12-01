@@ -260,10 +260,13 @@ python tests/test_send.py
 python tests/test_graphics.py
 ```
 
-## Credits
+## Credits & Acknowledgments
 
-- BLE protocol reverse-engineered by [Puparia](https://github.com/Pupariaa)
-- Original toolkit: [Bk-Light-AppBypass](https://github.com/Pupariaa/Bk-Light-AppBypass)
+This project is built upon the excellent reverse-engineering work by **Puparia**:
+
+🙏 **[Bk-Light-AppBypass](https://github.com/Pupariaa/Bk-Light-AppBypass)** - The original Python toolkit that decoded the BLE protocol for BK-Light LED panels. Without this foundational work, Panel Hopper would not exist.
+
+Panel Hopper extends this with a web interface, multi-panel grid support, and additional features while keeping the core BLE communication from the original project.
 
 ## License
 
