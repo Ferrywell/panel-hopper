@@ -91,6 +91,57 @@ def add_log(message: str, level: str = "info"):
     })
 
 
+def render_led_style(img: Image.Image, scale: int = 6) -> Image.Image:
+    """
+    Render an image with realistic LED pixel effect.
+    Each pixel becomes a rounded LED with gaps between them.
+    
+    Args:
+        img: Source image (typically 32x32)
+        scale: Scale factor per pixel (default 6 = 192x192 output for 32x32 input)
+    
+    Returns:
+        LED-style rendered image
+    """
+    w, h = img.size
+    gap = 1  # Gap between LEDs
+    led_size = scale - gap  # LED diameter
+    
+    # Create output image with dark background
+    out_w = w * scale
+    out_h = h * scale
+    output = Image.new('RGB', (out_w, out_h), (8, 8, 12))
+    draw = ImageDraw.Draw(output)
+    
+    # Render each pixel as a rounded LED
+    for y in range(h):
+        for x in range(w):
+            color = img.getpixel((x, y))
+            
+            # Calculate LED position (centered in cell)
+            cx = x * scale + scale // 2
+            cy = y * scale + scale // 2
+            
+            # LED bounds
+            x0 = cx - led_size // 2
+            y0 = cy - led_size // 2
+            x1 = x0 + led_size - 1
+            y1 = y0 + led_size - 1
+            
+            if color == (0, 0, 0) or (isinstance(color, tuple) and sum(color[:3]) < 10):
+                # Off pixel - subtle dark LED shape
+                draw.ellipse([x0, y0, x1, y1], fill=(12, 12, 18))
+            else:
+                # Lit pixel - draw LED with slight glow effect
+                # Outer glow (subtle)
+                glow_color = tuple(max(0, c // 4) for c in color[:3])
+                draw.ellipse([x0-1, y0-1, x1+1, y1+1], fill=glow_color)
+                # Main LED
+                draw.ellipse([x0, y0, x1, y1], fill=color[:3] if len(color) > 3 else color)
+    
+    return output
+
+
 # =============================================================================
 # FastAPI App
 # =============================================================================
@@ -183,8 +234,8 @@ async def get_asset(folder: str, filename: str):
 
 
 @app.get("/api/images/{folder}/{filename}/preview")
-async def get_image_preview(folder: str, filename: str, size: int = 32, grid: bool = False, animated: bool = False):
-    """Get a preview of an image, optionally as grid layout or animated GIF."""
+async def get_image_preview(folder: str, filename: str, size: int = 32, grid: bool = False, animated: bool = False, led_style: bool = False):
+    """Get a preview of an image, optionally as grid layout, animated GIF, or LED-style rendering."""
     file_path = ASSETS_DIR / folder / filename
     if not file_path.exists():
         raise HTTPException(404, "File not found")
@@ -264,7 +315,11 @@ async def get_image_preview(folder: str, filename: str, size: int = 32, grid: bo
         enhancer = ImageEnhance.Brightness(img)
         img = enhancer.enhance(GLOBAL_BRIGHTNESS)
     
-    if size != PANEL_SIZE and not grid:
+    # Apply LED-style rendering if requested
+    if led_style and not grid:
+        # Render with realistic LED pixel effect
+        img = render_led_style(img, scale=6)  # 32x32 -> 192x192
+    elif size != PANEL_SIZE and not grid:
         img = img.resize((size, size), Image.Resampling.NEAREST)
     
     buf = BytesIO()

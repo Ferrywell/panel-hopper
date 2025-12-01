@@ -69,25 +69,6 @@
         
         .logo:hover { opacity: 0.8; }
         
-        .header-controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
-        
-        .brightness-control { 
-            display: flex; 
-            align-items: center; 
-            gap: 0.5rem; 
-            font-size: var(--font-sm); 
-            color: var(--text-dim); 
-        }
-        .brightness-control input[type="range"] { 
-            width: 100px; 
-            accent-color: var(--accent); 
-            height: 24px;
-            cursor: pointer;
-        }
-        .brightness-value { min-width: 40px; text-align: right; }
-        
-        .header-actions { display: flex; gap: 0.5rem; }
-        
         /* Main Layout */
         main {
             display: grid;
@@ -103,6 +84,78 @@
             overflow-y: auto;
             display: flex;
             flex-direction: column;
+        }
+        
+        .sidebar-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .btn-scan-subtle {
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: 1px dashed var(--border);
+            border-radius: 6px;
+            color: var(--text-dim);
+            font-size: var(--font-sm);
+            cursor: pointer;
+            opacity: 0.5;
+            transition: all 0.2s;
+        }
+        
+        .btn-scan-subtle:hover {
+            opacity: 1;
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(255, 153, 0, 0.05);
+        }
+        
+        .btn-scan-subtle:disabled {
+            cursor: not-allowed;
+            opacity: 0.3;
+        }
+        
+        .sidebar-brightness {
+            margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .sidebar-brightness .brightness-icon {
+            color: var(--text-dim);
+            font-size: 1rem;
+        }
+        
+        .sidebar-brightness input[type="range"] {
+            flex: 1;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: var(--bg);
+            border-radius: 2px;
+            cursor: pointer;
+        }
+        
+        .sidebar-brightness input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            box-shadow: 0 0 6px rgba(255, 153, 0, 0.4);
+        }
+        
+        .sidebar-brightness .brightness-value {
+            font-size: var(--font-xs);
+            color: var(--text-dim);
+            min-width: 35px;
+            text-align: right;
         }
         
         .section-title {
@@ -440,7 +493,7 @@
             display: block;
             width: 192px;
             height: 192px;
-            image-rendering: pixelated;
+            border-radius: 4px;
         }
         
         /* Text Editor */
@@ -921,7 +974,6 @@
         @media (max-width: 600px) {
             header { padding: 0.5rem 1rem; }
             .logo { font-size: 1.1rem; }
-            .brightness-control input[type="range"] { width: 80px; }
             .text-editor { max-width: 100%; }
             .preview-wrap img, .text-preview-large .preview-wrap canvas { width: 160px; height: 160px; }
             .identify-number { font-size: 5rem; }
@@ -958,30 +1010,28 @@
             <button class="menu-toggle" onclick="toggleMenu()">☰</button>
             <a href="#" class="logo" onclick="goHome(event)">PANEL HOPPER</a>
         </div>
-        <div class="header-controls">
-            <div class="brightness-control">
-                <span>☀</span>
-                <input type="range" id="brightness-slider" min="10" max="100" value="100" 
-                       oninput="updateBrightnessPreview(this.value)" 
-                       onchange="saveBrightness(this.value)">
-                <span class="brightness-value" id="brightness-value">100%</span>
-            </div>
-            <div class="header-actions">
-                <button class="btn sm" id="btn-scan" onclick="scanPanels()">🔍 Scan</button>
-            </div>
-        </div>
     </header>
     
     <div class="menu-overlay" onclick="toggleMenu()"></div>
     
     <main>
         <aside id="sidebar">
-            <div class="section-title">Panels</div>
-            <div class="scan-status" id="scan-status">
-                <span class="spinner"></span>
-                <span id="scan-status-text">Scanning...</span>
+            <div class="sidebar-main">
+                <div class="section-title">Panels</div>
+                <div class="scan-status" id="scan-status">
+                    <span class="spinner"></span>
+                    <span id="scan-status-text">Scanning...</span>
+                </div>
+                <div id="panels-list"></div>
+                <button class="btn-scan-subtle" id="btn-scan" onclick="scanPanels()">🔍 Scan for Panels</button>
             </div>
-            <div id="panels-list"></div>
+            <div class="sidebar-brightness">
+                <span class="brightness-icon">☀</span>
+                <input type="range" id="brightness-slider" min="10" max="100" value="100" 
+                       oninput="updateBrightnessPreview(this.value)" 
+                       onchange="saveBrightness(this.value)">
+                <span class="brightness-value" id="brightness-value">100%</span>
+            </div>
         </aside>
         
         <div class="content">
@@ -1131,7 +1181,7 @@
                             </div>
                             <div class="led-canvas-container">
                                 <div class="led-canvas-wrap" id="led-canvas-wrap">
-                                    <img id="grid-preview-img" src="" alt="Preview" style="width:256px;height:256px;">
+                                    <img id="grid-preview-img" src="" alt="Preview" style="width:160px;height:160px;">
                                     <div class="grid-overlay" id="grid-overlay"></div>
                                 </div>
                             </div>
@@ -1434,7 +1484,8 @@
             if (selectedImage) {
                 const isAnimated = selectedImageData?.is_animated;
                 const animParam = isAnimated ? '&animated=true' : '';
-                img.src = `/api/images/${selectedImage.replace('/assets/', '')}/preview?size=192${animParam}&_=${Date.now()}`;
+                // Use LED-style rendering for realistic panel preview
+                img.src = `/api/images/${selectedImage.replace('/assets/', '')}/preview?led_style=true${animParam}&_=${Date.now()}`;
                 previewSection.style.display = 'flex';
             } else {
                 img.src = '';
@@ -1690,10 +1741,12 @@
             document.getElementById('grid-cols').value = gridCols;
             document.getElementById('grid-rows').value = gridRows;
             
-            // Update preview size
-            const size = Math.max(gridCols, gridRows) * 80;
-            document.getElementById('grid-preview-img').style.width = size + 'px';
-            document.getElementById('grid-preview-img').style.height = size + 'px';
+            // Update preview size - each panel is a square (80x80)
+            const cellSize = 80;
+            const width = gridCols * cellSize;
+            const height = gridRows * cellSize;
+            document.getElementById('grid-preview-img').style.width = width + 'px';
+            document.getElementById('grid-preview-img').style.height = height + 'px';
             
             renderGridOverlay();
             renderDragItems();
