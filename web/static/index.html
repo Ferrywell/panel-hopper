@@ -181,7 +181,7 @@
             overflow-y: auto;
         }
         
-        .tabs { display: flex; border-bottom: 1px solid var(--border); gap: 0.25rem; overflow-x: auto; }
+        .tabs { display: flex; border-bottom: 1px solid var(--border); gap: 0.25rem; overflow-x: auto; overflow-y: hidden; }
         
         .tab {
             padding: 0.6rem 1rem;
@@ -804,8 +804,92 @@
         .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
         
         footer { background: var(--surface); border-top: 1px solid var(--border); padding: 0.6rem 1.5rem; text-align: center; font-size: var(--font-xs); color: var(--text-dim); }
-        footer a { color: var(--accent); text-decoration: none; }
-        footer a:hover { text-decoration: underline; }
+        footer .secret-trigger { color: var(--accent); cursor: pointer; user-select: none; }
+        footer .secret-trigger:hover { text-decoration: underline; }
+        
+        /* Matrix Tab (Hidden Easter Egg) */
+        .tab.matrix-tab { display: none; background: linear-gradient(135deg, #1a1a25, #252535); }
+        .tab.matrix-tab.revealed { display: inline-flex; animation: matrixReveal 0.5s ease-out; }
+        @keyframes matrixReveal {
+            from { transform: scale(0); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        
+        .matrix-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 1rem;
+            padding: 1rem 0;
+        }
+        
+        .matrix-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .matrix-item:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 153, 0, 0.2);
+        }
+        .matrix-item.selected {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+        }
+        
+        .matrix-item canvas {
+            border-radius: 4px;
+            image-rendering: pixelated;
+        }
+        
+        .matrix-item-label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            text-align: center;
+        }
+        
+        .matrix-preview {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding: 1.5rem;
+            background: var(--surface-2);
+            border-radius: 12px;
+        }
+        
+        .matrix-preview canvas {
+            border: 2px solid var(--border);
+            border-radius: 4px;
+            image-rendering: pixelated;
+        }
+        
+        .matrix-category {
+            margin-bottom: 1.5rem;
+        }
+        .matrix-category h4 {
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .matrix-category h4::before {
+            content: '';
+            flex: 0 0 3px;
+            height: 1rem;
+            background: var(--accent);
+            border-radius: 2px;
+        }
         
         /* Responsive */
         @media (max-width: 1200px) {
@@ -905,6 +989,7 @@
                 <button class="tab active" data-tab="images">Images</button>
                 <button class="tab" data-tab="text">Text</button>
                 <button class="tab" data-tab="grid">Grid Setup</button>
+                <button class="tab matrix-tab" data-tab="matrix" id="matrix-tab-btn">🚦 Matrix</button>
             </div>
             
             <!-- Images Tab -->
@@ -1064,6 +1149,42 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Matrix Tab (Hidden Easter Egg - Dutch Highway Signs) -->
+            <div class="tab-content" id="tab-matrix">
+                <div class="matrix-preview">
+                    <h4>🚦 Snelweg Matrixbord Preview</h4>
+                    <canvas id="matrix-preview-canvas" width="128" height="128"></canvas>
+                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:0.5rem;">
+                        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.8rem;color:var(--text-dim);cursor:pointer;">
+                            <input type="checkbox" id="flasher-toggle" onchange="toggleFlashers(this.checked)">
+                            <span>⚠️ AID Flashers</span>
+                        </label>
+                    </div>
+                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center;margin-top:0.75rem;">
+                        <button class="btn primary" onclick="sendMatrixToPanel()">→ Send to Panel</button>
+                        <button class="btn" onclick="sendMatrixToAll()">⇒ All Panels</button>
+                    </div>
+                    <div style="font-size:0.65rem;color:var(--text-dim);margin-top:0.5rem;text-align:center;">
+                        Gebaseerd op <a href="https://nl.wikipedia.org/wiki/Rijstrooksignalering" target="_blank" style="color:var(--accent);">Rijstrooksignalering</a>
+                    </div>
+                </div>
+                
+                <div class="matrix-category">
+                    <h4>Snelheidslimieten</h4>
+                    <div class="matrix-grid" id="matrix-speeds"></div>
+                </div>
+                
+                <div class="matrix-category">
+                    <h4>Rijstrook Signalen</h4>
+                    <div class="matrix-grid" id="matrix-lanes"></div>
+                </div>
+                
+                <div class="matrix-category">
+                    <h4>Waarschuwingen</h4>
+                    <div class="matrix-grid" id="matrix-warnings"></div>
+                </div>
+            </div>
         </div>
         
         <div class="sidebar-right">
@@ -1075,7 +1196,7 @@
         </div>
     </main>
     
-    <footer>© <span id="year"></span> Panel Hopper · <a href="#">[HOP]Ferrywell</a></footer>
+    <footer>© <span id="year"></span> Panel Hopper · <span class="secret-trigger" id="secret-trigger">[HOP]Ferrywell</span></footer>
     
     <div class="identify-overlay" id="identify-overlay">
         <div class="identify-number" id="identify-number">1</div>
@@ -1246,10 +1367,20 @@
             } catch (err) { console.error(err); }
         }
         
-        function stopIdentify() {
+        async function stopIdentify() {
+            const mac = identifyingMac;
             identifyingMac = null;
             document.getElementById('identify-overlay').classList.remove('active');
             renderPanels();
+            
+            // Send blank/black screen to restore panel
+            if (mac) {
+                try {
+                    const fd = new FormData();
+                    fd.append('panel_mac', mac);
+                    await fetch('/api/panels/clear', { method: 'POST', body: fd });
+                } catch (err) { console.error(err); }
+            }
         }
         
         // Images
@@ -1815,6 +1946,370 @@
         function fetchGifs() { /* Coming soon */ }
         function loadMoreGifs() { /* Coming soon */ }
         function selectGiphyGif() { /* Coming soon */ }
+        
+        // =================================================================
+        // 🚦 MATRIX - Dutch Highway Signs (Easter Egg)
+        // =================================================================
+        
+        let matrixClickCount = 0;
+        let matrixClickTimer = null;
+        let selectedMatrixSign = null;
+        let matrixImageData = null;
+        
+        // Easter egg: 5 clicks within 3 seconds reveals Matrix tab
+        document.getElementById('secret-trigger')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            matrixClickCount++;
+            
+            if (matrixClickTimer) clearTimeout(matrixClickTimer);
+            matrixClickTimer = setTimeout(() => { matrixClickCount = 0; }, 3000);
+            
+            if (matrixClickCount >= 5) {
+                matrixClickCount = 0;
+                clearTimeout(matrixClickTimer);
+                revealMatrixTab();
+            }
+        });
+        
+        function revealMatrixTab() {
+            const matrixTab = document.getElementById('matrix-tab-btn');
+            if (matrixTab && !matrixTab.classList.contains('revealed')) {
+                matrixTab.classList.add('revealed');
+                initMatrixSigns();
+            }
+        }
+        
+        // Matrix sign definitions - Dutch highway matrix boards (Rijstrooksignalering)
+        const MATRIX_SIGNS = {
+            speeds: [
+                { id: 'speed-50', label: '50', value: 50, hasRing: false },
+                { id: 'speed-70', label: '70', value: 70, hasRing: false },
+                { id: 'speed-80', label: '80', value: 80, hasRing: false },
+                { id: 'speed-90', label: '90', value: 90, hasRing: false },
+                { id: 'speed-100', label: '100', value: 100, hasRing: true },
+                { id: 'speed-110', label: '110', value: 110, hasRing: true },
+                { id: 'speed-120', label: '120', value: 120, hasRing: true },
+                { id: 'speed-130', label: '130', value: 130, hasRing: true },
+            ],
+            lanes: [
+                { id: 'lane-open', label: 'Vrij', type: 'arrow-down', color: '#00ff00' },
+                { id: 'lane-closed', label: 'Dicht', type: 'cross', color: '#ff0000' },
+                { id: 'lane-left', label: 'Links', type: 'arrow-left', color: '#ffffff' },
+                { id: 'lane-right', label: 'Rechts', type: 'arrow-right', color: '#ffffff' },
+                { id: 'lane-end', label: 'Einde', type: 'end-limit', color: '#ffffff' },
+            ],
+            warnings: [
+                { id: 'blank', label: 'Uit', type: 'blank', color: '#000000' },
+            ]
+        };
+        
+        // AID Flasher state (Automatische Incident Detectie)
+        let flasherEnabled = false;
+        let flasherState = 0; // 0 = off, 1 = bottom pair, 2 = top pair
+        let flasherInterval = null;
+        
+        // Draw matrix sign for 32x32 LED panels
+        function drawMatrixSign(ctx, sign, size, withFlashers = false, flasherPhase = 0) {
+            const s = size;
+            ctx.imageSmoothingEnabled = false;
+            
+            // Black background
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, s, s);
+            
+            const scale = s / 32;
+            const cx = s / 2;
+            const cy = s / 2;
+            
+            // Draw corner flashers (AID) if enabled - 5px diameter, 1px from edges
+            if (withFlashers) {
+                const lampR = Math.round(2.5 * scale);
+                const lampOff = Math.round(1 * scale) + lampR;
+                const bottomOn = flasherPhase === 1;
+                const topOn = flasherPhase === 2;
+                
+                [[lampOff, s - lampOff, bottomOn], [s - lampOff, s - lampOff, bottomOn],
+                 [lampOff, lampOff, topOn], [s - lampOff, lampOff, topOn]].forEach(([x, y, on]) => {
+                    ctx.fillStyle = on ? '#ffaa00' : '#221100';
+                    ctx.beginPath();
+                    ctx.arc(x, y, lampR, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+            
+            // ========== SPEED SIGNS ==========
+            if (sign.value !== undefined) {
+                // Red ring for 100+ speeds
+                if (sign.hasRing) {
+                    ctx.strokeStyle = '#ff0000';
+                    ctx.lineWidth = Math.round(2 * scale);
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, Math.round(13 * scale), 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                
+                // White speed number
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                if (sign.value >= 100) {
+                    ctx.font = `bold ${Math.round(12 * scale)}px Arial`;
+                } else {
+                    ctx.font = `bold ${Math.round(18 * scale)}px Arial`;
+                }
+                ctx.fillText(sign.value.toString(), cx, cy + scale);
+                return;
+            }
+            
+            // ========== LANE SIGNALS ==========
+            ctx.fillStyle = sign.color;
+            ctx.strokeStyle = sign.color;
+            
+            switch (sign.type) {
+                case 'arrow-down':
+                    // GREEN arrow pointing DOWN (rijstrook vrij)
+                    ctx.fillRect(Math.round(cx - 2 * scale), Math.round(4 * scale), Math.round(4 * scale), Math.round(14 * scale));
+                    ctx.beginPath();
+                    ctx.moveTo(Math.round(cx - 10 * scale), Math.round(16 * scale));
+                    ctx.lineTo(cx, Math.round(28 * scale));
+                    ctx.lineTo(Math.round(cx + 10 * scale), Math.round(16 * scale));
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                    
+                case 'cross':
+                    // RED X (andreaskruis - rijstrook gesloten)
+                    ctx.lineWidth = Math.round(4 * scale);
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(Math.round(5 * scale), Math.round(5 * scale));
+                    ctx.lineTo(Math.round(27 * scale), Math.round(27 * scale));
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(Math.round(27 * scale), Math.round(5 * scale));
+                    ctx.lineTo(Math.round(5 * scale), Math.round(27 * scale));
+                    ctx.stroke();
+                    break;
+                    
+                case 'arrow-left':
+                    // WHITE diagonal arrow pointing DOWN-LEFT (verdrijfpijl links)
+                    ctx.lineWidth = Math.round(3 * scale);
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(Math.round(24 * scale), Math.round(6 * scale));
+                    ctx.lineTo(Math.round(12 * scale), Math.round(18 * scale));
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(Math.round(4 * scale), Math.round(16 * scale));
+                    ctx.lineTo(Math.round(8 * scale), Math.round(28 * scale));
+                    ctx.lineTo(Math.round(18 * scale), Math.round(20 * scale));
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                    
+                case 'arrow-right':
+                    // WHITE diagonal arrow pointing DOWN-RIGHT (verdrijfpijl rechts)
+                    ctx.lineWidth = Math.round(3 * scale);
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(Math.round(8 * scale), Math.round(6 * scale));
+                    ctx.lineTo(Math.round(20 * scale), Math.round(18 * scale));
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(Math.round(28 * scale), Math.round(16 * scale));
+                    ctx.lineTo(Math.round(24 * scale), Math.round(28 * scale));
+                    ctx.lineTo(Math.round(14 * scale), Math.round(20 * scale));
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                    
+                case 'end-limit':
+                    // White circle with diagonal line (einde beperking)
+                    ctx.strokeStyle = sign.color;
+                    ctx.lineWidth = Math.round(2 * scale);
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, Math.round(12 * scale), 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(Math.round(8 * scale), Math.round(24 * scale));
+                    ctx.lineTo(Math.round(24 * scale), Math.round(8 * scale));
+                    ctx.stroke();
+                    break;
+                    
+                case 'blank':
+                    // Just black - panel off
+                    break;
+            }
+        }
+        
+        function initMatrixSigns() {
+            // Initialize speed signs
+            const speedsContainer = document.getElementById('matrix-speeds');
+            if (speedsContainer) {
+                speedsContainer.innerHTML = '';
+                MATRIX_SIGNS.speeds.forEach(sign => {
+                    const item = createMatrixItem(sign);
+                    speedsContainer.appendChild(item);
+                });
+            }
+            
+            // Initialize lane signals
+            const lanesContainer = document.getElementById('matrix-lanes');
+            if (lanesContainer) {
+                lanesContainer.innerHTML = '';
+                MATRIX_SIGNS.lanes.forEach(sign => {
+                    const item = createMatrixItem(sign);
+                    lanesContainer.appendChild(item);
+                });
+            }
+            
+            // Initialize warnings
+            const warningsContainer = document.getElementById('matrix-warnings');
+            if (warningsContainer) {
+                warningsContainer.innerHTML = '';
+                MATRIX_SIGNS.warnings.forEach(sign => {
+                    const item = createMatrixItem(sign);
+                    warningsContainer.appendChild(item);
+                });
+            }
+        }
+        
+        function createMatrixItem(sign) {
+            const item = document.createElement('div');
+            item.className = 'matrix-item';
+            item.dataset.signId = sign.id;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            canvas.style.width = '64px';
+            canvas.style.height = '64px';
+            
+            const ctx = canvas.getContext('2d');
+            drawMatrixSign(ctx, sign, 32, false, 0); // No flashers in grid items
+            
+            const label = document.createElement('div');
+            label.className = 'matrix-item-label';
+            label.textContent = sign.label;
+            
+            item.appendChild(canvas);
+            item.appendChild(label);
+            
+            item.addEventListener('click', () => selectMatrixSign(sign, item));
+            
+            return item;
+        }
+        
+        function selectMatrixSign(sign, itemElement) {
+            // Deselect previous
+            document.querySelectorAll('.matrix-item').forEach(el => el.classList.remove('selected'));
+            
+            // Select new
+            itemElement.classList.add('selected');
+            selectedMatrixSign = sign;
+            
+            // Update preview
+            updateMatrixPreview();
+        }
+        
+        function updateMatrixPreview() {
+            if (!selectedMatrixSign) return;
+            
+            const previewCanvas = document.getElementById('matrix-preview-canvas');
+            if (previewCanvas) {
+                const ctx = previewCanvas.getContext('2d');
+                ctx.imageSmoothingEnabled = false;
+                
+                // Draw at 32x32 then scale
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = 32;
+                tempCanvas.height = 32;
+                const tempCtx = tempCanvas.getContext('2d');
+                drawMatrixSign(tempCtx, selectedMatrixSign, 32, flasherEnabled, flasherState);
+                
+                // Scale up to preview size
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, 128, 128);
+                ctx.drawImage(tempCanvas, 0, 0, 128, 128);
+                
+                // Store image data for sending (current frame)
+                matrixImageData = tempCanvas.toDataURL('image/png');
+            }
+        }
+        
+        function toggleFlashers(enabled) {
+            flasherEnabled = enabled;
+            
+            if (flasherInterval) {
+                clearInterval(flasherInterval);
+                flasherInterval = null;
+            }
+            
+            if (enabled) {
+                // Start flasher animation: bottom pair -> top pair -> all off
+                // 1 second per phase, 3 second total cycle
+                flasherState = 1;
+                updateMatrixPreview();
+                
+                let phase = 0;
+                flasherInterval = setInterval(() => {
+                    phase = (phase + 1) % 3;
+                    if (phase === 0) flasherState = 1;      // Bottom pair (1 sec)
+                    else if (phase === 1) flasherState = 2; // Top pair (1 sec)
+                    else flasherState = 0;                   // All off (1 sec)
+                    updateMatrixPreview();
+                }, 1000); // 1 second per phase, 3 second total cycle
+            } else {
+                flasherState = 0;
+                updateMatrixPreview();
+            }
+        }
+        
+        async function sendMatrixToPanel() {
+            if (!selectedMatrixSign || !matrixImageData) {
+                alert('Select a matrix sign first');
+                return;
+            }
+            if (!selectedPanel) {
+                alert('Select a panel first');
+                return;
+            }
+            
+            document.getElementById('loading')?.classList.add('active');
+            
+            try {
+                const fd = new FormData();
+                fd.append('image_data', matrixImageData);
+                fd.append('panel_mac', selectedPanel);
+                
+                await fetch('/api/send/base64', { method: 'POST', body: fd });
+            } catch (err) {
+                console.error('Matrix send error:', err);
+            }
+            
+            document.getElementById('loading')?.classList.remove('active');
+        }
+        
+        async function sendMatrixToAll() {
+            if (!selectedMatrixSign || !matrixImageData) {
+                alert('Select a matrix sign first');
+                return;
+            }
+            
+            document.getElementById('loading')?.classList.add('active');
+            
+            try {
+                const fd = new FormData();
+                fd.append('image_data', matrixImageData);
+                
+                await fetch('/api/send/base64/all', { method: 'POST', body: fd });
+            } catch (err) {
+                console.error('Matrix send error:', err);
+            }
+            
+            document.getElementById('loading')?.classList.remove('active');
+        }
         
         // Init
         init();

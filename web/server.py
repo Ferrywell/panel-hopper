@@ -462,6 +462,29 @@ async def identify_panel(panel_mac: str = Form(...), number: int = Form(...)):
         return {"status": "error", "message": message}
 
 
+@app.post("/api/panels/clear")
+async def clear_panel(panel_mac: str = Form(...)):
+    """Send a blank/black screen to a panel."""
+    config = load_config()
+    mac = panel_mac.upper()
+    
+    panel = config.get_panel_by_mac(mac)
+    name = panel.name if panel else mac
+    
+    # Create black image
+    img = Image.new('RGB', (PANEL_SIZE, PANEL_SIZE), (0, 0, 0))
+    png_bytes = to_png_bytes(img)
+    
+    # Send to panel
+    controller = PanelController(timeout=15.0, retries=1)
+    success, message = await controller.send_to_panel(mac, png_bytes, name)
+    
+    if success:
+        add_log(f"✓ {name} cleared", "info")
+        return {"status": "ok"}
+    else:
+        add_log(f"✗ {name}: {message}", "error")
+        return {"status": "error", "message": message}
 
 
 # =============================================================================
@@ -706,6 +729,110 @@ async def send_to_grid(
 
 
 # =============================================================================
+# Base64 Image Endpoints (for Matrix signs etc)
+# =============================================================================
+
+@app.post("/api/send/base64")
+async def send_base64_to_single(
+    panel_mac: str = Form(...),
+    image_data: str = Form(...),
+):
+    """Send a base64-encoded image to a single panel."""
+    import base64
+    
+    config = load_config()
+    panel = config.get_panel_by_mac(panel_mac)
+    
+    if not panel:
+        raise HTTPException(404, "Panel not found")
+    
+    add_log(f"Sending to {panel.name}...", "info")
+    
+    # Decode base64 image
+    try:
+        # Remove data URL prefix if present
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+        
+        img_bytes = base64.b64decode(image_data)
+        img = Image.open(BytesIO(img_bytes)).convert('RGB')
+        
+        # Resize to panel size
+        img = img.resize((PANEL_SIZE, PANEL_SIZE), Image.Resampling.NEAREST)
+        
+        # Apply brightness
+        if GLOBAL_BRIGHTNESS < 1.0:
+            from PIL import ImageEnhance
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(GLOBAL_BRIGHTNESS)
+        
+        png_bytes = to_png_bytes(img)
+    except Exception as e:
+        add_log(f"Image decode error: {e}", "error")
+        raise HTTPException(400, f"Invalid image data: {e}")
+    
+    controller = PanelController()
+    success, message = await controller.send_to_panel(panel.mac, png_bytes, panel.name)
+    
+    if success:
+        add_log(f"✓ Sent to {panel.name}", "success")
+    else:
+        add_log(f"✗ {panel.name}: {message}", "error")
+    
+    return {"status": "ok" if success else "error", "message": message}
+
+
+@app.post("/api/send/base64/all")
+async def send_base64_to_all(
+    image_data: str = Form(...),
+):
+    """Send a base64-encoded image to all enabled panels."""
+    import base64
+    
+    config = load_config()
+    panels = config.get_enabled_panels()
+    
+    if not panels:
+        raise HTTPException(400, "No enabled panels")
+    
+    add_log(f"Sending to {len(panels)} panels...", "info")
+    
+    # Decode base64 image
+    try:
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+        
+        img_bytes = base64.b64decode(image_data)
+        img = Image.open(BytesIO(img_bytes)).convert('RGB')
+        img = img.resize((PANEL_SIZE, PANEL_SIZE), Image.Resampling.NEAREST)
+        
+        if GLOBAL_BRIGHTNESS < 1.0:
+            from PIL import ImageEnhance
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(GLOBAL_BRIGHTNESS)
+        
+        png_bytes = to_png_bytes(img)
+    except Exception as e:
+        add_log(f"Image decode error: {e}", "error")
+        raise HTTPException(400, f"Invalid image data: {e}")
+    
+    controller = PanelController()
+    success_count = 0
+    
+    for panel in panels:
+        success, message = await controller.send_to_panel(panel.mac, png_bytes, panel.name)
+        if success:
+            add_log(f"✓ {panel.name}", "success")
+            success_count += 1
+        else:
+            add_log(f"✗ {panel.name}: {message}", "error")
+    
+    add_log(f"Complete: {success_count}/{len(panels)}", "info")
+    
+    return {"status": "ok", "success_count": success_count, "total": len(panels)}
+
+
+# =============================================================================
 # Text Preview Endpoint
 # =============================================================================
 
@@ -778,10 +905,11 @@ def create_multiline_text_image(
         return font
     
     # Use pilmoji for emoji support if available
+    # Note: pilmoji may fail with newer emoji library versions
     try:
         from pilmoji import Pilmoji
         use_pilmoji = True
-    except ImportError:
+    except Exception:
         use_pilmoji = False
     
     if use_pilmoji and contains_emoji:
