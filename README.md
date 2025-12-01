@@ -1,4 +1,4 @@
-# Panel Hopper 🦘
+# Panel Hopper 🪱
 
 A Python toolkit for controlling **BK-Light ACT1026 32×32 RGB LED panels** over Bluetooth Low Energy (BLE).
 
