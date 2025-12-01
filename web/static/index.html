@@ -914,23 +914,14 @@
                         <input type="file" id="file-input" accept="image/*,.gif" multiple>
                         📁 Drop images/GIFs or click
                     </div>
-                    <div class="giphy-search-box" style="flex:1;min-width:200px;">
-                        <input type="text" id="giphy-search" placeholder="🔍 Search GIFs on Giphy..." 
-                               onfocus="showGiphyPicker()" oninput="searchGiphy(this.value)">
+                    <div class="giphy-search-box" style="flex:1;min-width:200px;opacity:0.5;pointer-events:none;">
+                        <input type="text" id="giphy-search" placeholder="🔍 Giphy Search — Coming Soon" disabled
+                               style="cursor:not-allowed;">
                     </div>
                 </div>
                 
-                <!-- Giphy Picker Dropdown -->
-                <div class="giphy-picker" id="giphy-picker" style="display:none;">
-                    <div class="giphy-tabs">
-                        <button class="giphy-tab active" onclick="loadTrendingGifs()">🔥 Trending</button>
-                        <button class="giphy-tab" onclick="closeGiphyPicker()">✕ Close</button>
-                    </div>
-                    <div class="giphy-grid" id="giphy-grid"></div>
-                    <div class="giphy-load-more" id="giphy-load-more" style="display:none;">
-                        <button class="btn sm" onclick="loadMoreGifs()">Load More</button>
-                    </div>
-                </div>
+                <!-- Giphy Picker (disabled for now) -->
+                <div class="giphy-picker" id="giphy-picker" style="display:none;"></div>
                 
                 <div class="image-grid" id="image-grid"></div>
                 
@@ -1816,127 +1807,14 @@
             });
         }
         
-        // Giphy Integration
-        let giphyOffset = 0;
-        let giphyQuery = '';
-        let giphySearchTimeout = null;
-        
-        function showGiphyPicker() {
-            document.getElementById('giphy-picker').style.display = 'block';
-            if (document.getElementById('giphy-grid').children.length === 0) {
-                loadTrendingGifs();
-            }
-        }
-        
-        function closeGiphyPicker() {
-            document.getElementById('giphy-picker').style.display = 'none';
-            document.getElementById('giphy-search').value = '';
-        }
-        
-        async function loadTrendingGifs() {
-            giphyQuery = '';
-            giphyOffset = 0;
-            document.querySelectorAll('.giphy-tab').forEach(t => t.classList.remove('active'));
-            document.querySelector('.giphy-tab').classList.add('active');
-            await fetchGifs();
-        }
-        
-        function searchGiphy(query) {
-            if (giphySearchTimeout) clearTimeout(giphySearchTimeout);
-            giphySearchTimeout = setTimeout(() => {
-                if (query.trim().length >= 2) {
-                    giphyQuery = query.trim();
-                    giphyOffset = 0;
-                    fetchGifs();
-                    document.getElementById('giphy-picker').style.display = 'block';
-                } else if (query.trim().length === 0) {
-                    loadTrendingGifs();
-                }
-            }, 300);
-        }
-        
-        async function fetchGifs(append = false) {
-            const grid = document.getElementById('giphy-grid');
-            if (!append) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:1rem;">Loading...</div>';
-            
-            try {
-                const endpoint = giphyQuery 
-                    ? `/api/giphy/search?q=${encodeURIComponent(giphyQuery)}&limit=12&offset=${giphyOffset}`
-                    : `/api/giphy/trending?limit=12&offset=${giphyOffset}`;
-                
-                const res = await fetch(endpoint);
-                const data = await res.json();
-                
-                if (!append) grid.innerHTML = '';
-                
-                data.gifs.forEach(gif => {
-                    const item = document.createElement('div');
-                    item.className = 'giphy-item';
-                    item.innerHTML = `<img src="${gif.preview}" alt="${gif.title}" loading="lazy">`;
-                    item.onclick = () => selectGiphyGif(gif);
-                    grid.appendChild(item);
-                });
-                
-                // Show load more if there are more results
-                const loadMore = document.getElementById('giphy-load-more');
-                if (data.gifs.length >= 12) {
-                    loadMore.style.display = 'block';
-                } else {
-                    loadMore.style.display = 'none';
-                }
-            } catch (err) {
-                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:1rem;color:var(--error);">Failed to load GIFs</div>';
-            }
-        }
-        
-        function loadMoreGifs() {
-            giphyOffset += 12;
-            fetchGifs(true);
-        }
-        
-        async function selectGiphyGif(gif) {
-            // Show loading
-            const grid = document.getElementById('giphy-grid');
-            const loadingDiv = document.createElement('div');
-            loadingDiv.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:2000;';
-            loadingDiv.innerHTML = '<div style="text-align:center;"><div class="spinner" style="width:40px;height:40px;margin-bottom:1rem;"></div><div>Downloading GIF...</div></div>';
-            document.body.appendChild(loadingDiv);
-            
-            try {
-                const fd = new FormData();
-                fd.append('gif_url', gif.small || gif.original);
-                fd.append('gif_id', gif.id);
-                
-                const res = await fetch('/api/giphy/download', { method: 'POST', body: fd });
-                const data = await res.json();
-                
-                if (data.status === 'ok') {
-                    closeGiphyPicker();
-                    await loadImages();
-                    // Select the newly downloaded GIF
-                    selectedImage = data.path;
-                    selectedImageData = images.find(i => i.path === data.path);
-                    renderImages();
-                    updateButtons();
-                    updateImagePreview();
-                }
-            } catch (err) {
-                console.error('GIF download failed:', err);
-            }
-            
-            loadingDiv.remove();
-        }
-        
-        // Close giphy picker when clicking outside
-        document.addEventListener('click', (e) => {
-            const picker = document.getElementById('giphy-picker');
-            const searchBox = document.querySelector('.giphy-search-box');
-            if (picker.style.display !== 'none' && 
-                !picker.contains(e.target) && 
-                !searchBox.contains(e.target)) {
-                closeGiphyPicker();
-            }
-        });
+        // Giphy Integration (Coming Soon - disabled)
+        function showGiphyPicker() { /* Coming soon */ }
+        function closeGiphyPicker() { /* Coming soon */ }
+        function loadTrendingGifs() { /* Coming soon */ }
+        function searchGiphy() { /* Coming soon */ }
+        function fetchGifs() { /* Coming soon */ }
+        function loadMoreGifs() { /* Coming soon */ }
+        function selectGiphyGif() { /* Coming soon */ }
         
         // Init
         init();
