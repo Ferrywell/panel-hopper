@@ -80,7 +80,35 @@ class PanelManager:
         self._monitor_task: Optional[asyncio.Task] = None
         self._monitor_interval: float = 5.0  # Check connections every 5 seconds
         
+        # Safe mode tracking
+        self._safe_mode_active: bool = False
+        self._safe_mode_adapter: Optional[str] = None
+        
+        # Set up safe mode callback
+        def on_safe_mode(adapter_address: str, adapter_name: str):
+            self._safe_mode_active = True
+            self._safe_mode_adapter = adapter_name or adapter_address
+            logger.warning(f"BLE Safe Mode activated for adapter: {self._safe_mode_adapter}")
+        
+        BleDisplaySession.set_safe_mode_callback(on_safe_mode)
+        
         logger.info("Panel Manager initialized")
+    
+    @property
+    def safe_mode(self) -> bool:
+        """Check if safe mode is active."""
+        return self._safe_mode_active
+    
+    @property
+    def adapter_name(self) -> str:
+        """Get the current adapter name."""
+        return self._safe_mode_adapter or "Bluetooth Adapter"
+    
+    def reset_safe_mode(self):
+        """Reset safe mode to try fast mode again."""
+        self._safe_mode_active = False
+        BleDisplaySession.reset_safe_mode()
+        logger.info("Safe mode reset - will try fast mode on next connection")
     
     # =========================================================================
     # Connection Monitoring

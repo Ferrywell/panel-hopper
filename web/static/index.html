@@ -970,6 +970,77 @@
         
         .log-entry { padding: 0.3rem 0.4rem; display: flex; gap: 0.5rem; border-radius: 4px; }
         .log-entry:nth-child(odd) { background: var(--surface-2); }
+        
+        /* Log footer with adapter info */
+        .log-footer {
+            border-top: 1px solid var(--border);
+            padding: 0.5rem;
+            font-size: var(--font-xs);
+            background: var(--surface-2);
+        }
+        
+        .adapter-info {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: var(--text-muted);
+            padding: 0.3rem 0;
+        }
+        
+        .adapter-icon { font-size: 0.9rem; }
+        .adapter-name { opacity: 0.8; }
+        
+        /* Safe mode banner with blue gradient stripes */
+        .safe-mode-banner {
+            margin-top: 0.5rem;
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+            padding: 0.5rem 0.7rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+        
+        .safe-mode-stripes {
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                #1e3a5f,
+                #1e3a5f 10px,
+                #0d47a1 10px,
+                #0d47a1 20px
+            );
+            opacity: 0.9;
+            animation: stripe-move 2s linear infinite;
+        }
+        
+        @keyframes stripe-move {
+            0% { background-position: 0 0; }
+            100% { background-position: 28px 0; }
+        }
+        
+        .safe-mode-text {
+            position: relative;
+            color: #90caf9;
+            font-weight: 600;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+        
+        .safe-mode-banner .btn {
+            position: relative;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            font-size: 0.65rem;
+            padding: 0.2rem 0.5rem;
+        }
+        
+        .safe-mode-banner .btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
         .log-entry .time { color: var(--text-dim); flex-shrink: 0; }
         .log-entry.success .msg { color: var(--success); }
         .log-entry.error .msg { color: var(--error); }
@@ -1403,6 +1474,17 @@
                 <button class="btn sm" onclick="clearLogs()">Clear</button>
             </div>
             <div class="log-content" id="log-content"></div>
+            <div class="log-footer">
+                <div class="adapter-info" id="adapter-info">
+                    <span class="adapter-icon">📡</span>
+                    <span class="adapter-name" id="adapter-name">Bluetooth Adapter</span>
+                </div>
+                <div class="safe-mode-banner" id="safe-mode-banner" style="display: none;">
+                    <div class="safe-mode-stripes"></div>
+                    <span class="safe-mode-text">⚡ BLE Safe Mode</span>
+                    <button class="btn sm" onclick="resetSafeMode()" title="Try fast mode again">Reset</button>
+                </div>
+            </div>
         </div>
     </main>
     
@@ -1469,6 +1551,8 @@
         }
         
         // Connection status polling - keeps frontend in sync with backend
+        let wasSafeMode = false;
+        
         async function pollConnectionStatus() {
             try {
                 const res = await fetch('/api/panels/status');
@@ -1497,10 +1581,43 @@
                         }
                     });
                 }
+                
+                // Update adapter info
+                const adapterEl = document.getElementById('adapter-name');
+                if (adapterEl && data.adapter_name) {
+                    adapterEl.textContent = data.adapter_name;
+                }
+                
+                // Update safe mode banner
+                const safeModeEl = document.getElementById('safe-mode-banner');
+                if (safeModeEl) {
+                    if (data.safe_mode) {
+                        safeModeEl.style.display = 'flex';
+                        if (!wasSafeMode) {
+                            addLog('⚡ BLE Safe Mode activated - using slower but compatible mode', 'warning');
+                            wasSafeMode = true;
+                        }
+                    } else {
+                        safeModeEl.style.display = 'none';
+                        wasSafeMode = false;
+                    }
+                }
             } catch (err) {
                 // Silently ignore polling errors
             }
             setTimeout(pollConnectionStatus, 3000);  // Poll every 3 seconds
+        }
+        
+        async function resetSafeMode() {
+            try {
+                await fetch('/api/ble/reset-safe-mode', { method: 'POST' });
+                addLog('Safe mode reset - will try fast mode on next connection', 'info');
+                const safeModeEl = document.getElementById('safe-mode-banner');
+                if (safeModeEl) safeModeEl.style.display = 'none';
+                wasSafeMode = false;
+            } catch (err) {
+                addLog('Failed to reset safe mode', 'error');
+            }
         }
         
         // Brightness - only log on release
@@ -1974,13 +2091,14 @@
             document.getElementById('btn-send-single').disabled = !selectedPanel || !selectedImage;
             document.getElementById('btn-send-all').disabled = !selectedImage;
             
-            // Show info for GIFs (first frame only)
+            // Show info for GIFs
             const isGif = selectedImageData?.is_gif || selectedImage?.endsWith('.gif');
             const gifInfo = document.getElementById('gif-info');
             if (gifInfo) {
                 if (isGif) {
                     gifInfo.style.display = 'block';
-                    gifInfo.textContent = 'Note: GIFs will be sent as a static image (first frame)';
+                    gifInfo.textContent = '🎬 Animated GIF - will play on panel!';
+                    gifInfo.style.color = '#4ade80';  // Green color
                 } else {
                     gifInfo.style.display = 'none';
                 }
@@ -2818,22 +2936,60 @@
             
             if (enabled) {
                 // Start flasher animation: bottom pair -> top pair -> all off
-                // 1 second per phase, 3 second total cycle
+                // FASTER: 300ms per phase (was 1000ms), 900ms total cycle
                 flasherState = 1;
                 updateMatrixPreview();
                 
                 let phase = 0;
                 flasherInterval = setInterval(() => {
                     phase = (phase + 1) % 3;
-                    if (phase === 0) flasherState = 1;      // Bottom pair (1 sec)
-                    else if (phase === 1) flasherState = 2; // Top pair (1 sec)
-                    else flasherState = 0;                   // All off (1 sec)
+                    if (phase === 0) flasherState = 1;      // Bottom pair
+                    else if (phase === 1) flasherState = 2; // Top pair
+                    else flasherState = 0;                   // All off
                     updateMatrixPreview();
-                }, 1000); // 1 second per phase, 3 second total cycle
+                }, 300); // 300ms per phase = faster blink
             } else {
                 flasherState = 0;
                 updateMatrixPreview();
             }
+        }
+        
+        // Create animated GIF for matrix with flashers
+        async function createFlasherGif() {
+            if (!selectedMatrixSign) return null;
+            
+            // Create 3 frames: bottom on, top on, both off
+            const frames = [];
+            const size = 32;
+            
+            for (let phase = 1; phase <= 3; phase++) {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                
+                // Draw sign with flasher in this phase
+                const flasherPhase = phase === 3 ? 0 : phase;
+                drawMatrixSign(ctx, selectedMatrixSign, size, true, flasherPhase);
+                
+                frames.push(canvas.toDataURL('image/png'));
+            }
+            
+            // Send frames to server to create GIF
+            const response = await fetch('/api/matrix/create-gif', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    frames: frames,
+                    delay: 300  // 300ms per frame
+                })
+            });
+            
+            if (response.ok) {
+                const blob = await response.blob();
+                return blob;
+            }
+            return null;
         }
         
         async function sendMatrixToPanel() {
@@ -2849,11 +3005,21 @@
             document.getElementById('loading')?.classList.add('active');
             
             try {
-                const fd = new FormData();
-                fd.append('image_data', matrixImageData);
-                fd.append('panel_mac', selectedPanel);
-                
-                await fetch('/api/send/base64', { method: 'POST', body: fd });
+                // If flashers are enabled, send as animated GIF
+                if (flasherEnabled) {
+                    const gif = await createFlasherGif();
+                    if (gif) {
+                        const fd = new FormData();
+                        fd.append('file', gif, 'matrix_flashers.gif');
+                        fd.append('panel_mac', selectedPanel);
+                        await fetch('/api/send/single', { method: 'POST', body: fd });
+                    }
+                } else {
+                    const fd = new FormData();
+                    fd.append('image_data', matrixImageData);
+                    fd.append('panel_mac', selectedPanel);
+                    await fetch('/api/send/base64', { method: 'POST', body: fd });
+                }
             } catch (err) {
                 console.error('Matrix send error:', err);
             }
@@ -2870,10 +3036,19 @@
             document.getElementById('loading')?.classList.add('active');
             
             try {
-                const fd = new FormData();
-                fd.append('image_data', matrixImageData);
-                
-                await fetch('/api/send/base64/all', { method: 'POST', body: fd });
+                // If flashers are enabled, send as animated GIF
+                if (flasherEnabled) {
+                    const gif = await createFlasherGif();
+                    if (gif) {
+                        const fd = new FormData();
+                        fd.append('file', gif, 'matrix_flashers.gif');
+                        await fetch('/api/upload-and-send-all', { method: 'POST', body: fd });
+                    }
+                } else {
+                    const fd = new FormData();
+                    fd.append('image_data', matrixImageData);
+                    await fetch('/api/send/base64/all', { method: 'POST', body: fd });
+                }
             } catch (err) {
                 console.error('Matrix send error:', err);
             }

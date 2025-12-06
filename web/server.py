@@ -747,7 +747,18 @@ async def get_panels_status():
     return {
         "connected": manager.list_connected(),
         "panels": manager.list_panels(),
+        "safe_mode": manager.safe_mode,
+        "adapter_name": manager.adapter_name,
     }
+
+
+@app.post("/api/ble/reset-safe-mode")
+async def reset_safe_mode():
+    """Reset BLE safe mode to try fast mode again."""
+    manager = get_manager()
+    manager.reset_safe_mode()
+    add_log("BLE Safe Mode reset - will try fast mode", "info")
+    return {"success": True}
 
 
 @app.post("/api/panels/scan")
@@ -1393,6 +1404,85 @@ async def send_base64_to_all(
     add_log(f"Complete: {success_count}/{len(panels)}", "info")
     
     return {"status": "ok", "success_count": success_count, "total": len(panels)}
+
+
+@app.post("/api/upload-and-send-all")
+async def upload_and_send_all(file: UploadFile = File(...)):
+    """Upload a file and send it to all enabled panels. Supports GIFs."""
+    contents = await file.read()
+    
+    config = load_config()
+    panels = config.get_enabled_panels()
+    
+    if not panels:
+        raise HTTPException(400, "No enabled panels")
+    
+    # Check if it's a GIF
+    is_gif = file.filename and file.filename.lower().endswith('.gif')
+    if not is_gif:
+        is_gif = contents[:6] in [b'GIF87a', b'GIF89a']
+    
+    manager = get_manager()
+    results = []
+    
+    for panel in panels:
+        # Auto-connect if needed
+        if not manager.is_connected(panel.mac):
+            await manager.connect(panel.mac, name=panel.name)
+        
+        if is_gif:
+            success = await manager.send_gif(panel.mac, contents)
+        else:
+            # Convert to PNG
+            img = Image.open(BytesIO(contents))
+            img = img.convert('RGB').resize((32, 32), Image.Resampling.LANCZOS)
+            buf = BytesIO()
+            img.save(buf, format='PNG')
+            success = await manager.send_image(panel.mac, buf.getvalue())
+        
+        results.append({"mac": panel.mac, "name": panel.name, "success": success})
+    
+    success_count = sum(1 for r in results if r.get("success"))
+    add_log(f"Sent to {success_count}/{len(panels)} panels", "success" if success_count else "warning")
+    
+    return {"results": results}
+
+
+@app.post("/api/matrix/create-gif")
+async def create_matrix_gif(data: dict):
+    """Create an animated GIF from matrix sign frames with flashers."""
+    import base64
+    
+    frames_data = data.get('frames', [])
+    delay = data.get('delay', 300)  # ms between frames
+    
+    if not frames_data or len(frames_data) < 2:
+        raise HTTPException(400, "Need at least 2 frames")
+    
+    # Decode frames from base64
+    frames = []
+    for frame_data in frames_data:
+        if ',' in frame_data:
+            frame_data = frame_data.split(',')[1]
+        img_bytes = base64.b64decode(frame_data)
+        img = Image.open(BytesIO(img_bytes)).convert('P', palette=Image.Palette.ADAPTIVE, colors=256)
+        frames.append(img)
+    
+    # Create GIF
+    output = BytesIO()
+    frames[0].save(
+        output,
+        format='GIF',
+        save_all=True,
+        append_images=frames[1:],
+        duration=delay,
+        loop=0,  # Loop forever
+        optimize=False,
+        disposal=0
+    )
+    output.seek(0)
+    
+    return StreamingResponse(output, media_type="image/gif")
 
 
 # =============================================================================

@@ -205,6 +205,10 @@ async def wait_for_ack(event: asyncio.Event, label: str, verbose: bool) -> None:
 
 
 class BleDisplaySession:
+    # Class-level safe mode tracking (shared across instances per adapter)
+    _adapter_safe_mode: dict = {}  # adapter_address -> bool
+    _safe_mode_callback = None  # Callback when entering safe mode
+    
     def __init__(
         self,
         address: Optional[str] = None,
@@ -231,6 +235,59 @@ class BleDisplaySession:
         self.scan_timeout = scan_timeout
         self.client: Optional[BleakClient] = None
         self.watcher = AckWatcher(log_notifications)
+        self.adapter_address: Optional[str] = None  # Will be set after connection
+        self.adapter_name: Optional[str] = None     # Adapter name if available
+    
+    @property
+    def safe_mode(self) -> bool:
+        """Check if we're in safe mode for current adapter."""
+        if self.adapter_address:
+            return BleDisplaySession._adapter_safe_mode.get(self.adapter_address, False)
+        return False
+    
+    @safe_mode.setter
+    def safe_mode(self, value: bool):
+        """Set safe mode for current adapter."""
+        if self.adapter_address:
+            was_safe = BleDisplaySession._adapter_safe_mode.get(self.adapter_address, False)
+            BleDisplaySession._adapter_safe_mode[self.adapter_address] = value
+            # Notify callback when entering safe mode
+            if value and not was_safe and BleDisplaySession._safe_mode_callback:
+                BleDisplaySession._safe_mode_callback(self.adapter_address, self.adapter_name)
+    
+    @classmethod
+    def set_safe_mode_callback(cls, callback):
+        """Set callback for when safe mode is activated. callback(adapter_address, adapter_name)"""
+        cls._safe_mode_callback = callback
+    
+    @classmethod
+    def reset_safe_mode(cls, adapter_address: str = None):
+        """Reset safe mode for adapter (try fast mode again)."""
+        if adapter_address:
+            cls._adapter_safe_mode.pop(adapter_address, None)
+        else:
+            cls._adapter_safe_mode.clear()
+    
+    async def _safe_write(self, data: bytes, chunk_name: str = "data") -> None:
+        """
+        Write to BLE characteristic with automatic fallback to safe mode.
+        
+        If response=False fails, falls back to response=True and enables safe mode
+        for this adapter going forward.
+        """
+        if self.safe_mode:
+            # Already in safe mode - use response=True directly
+            await self.client.write_gatt_char(UUID_WRITE, data, response=True)
+            return
+        
+        try:
+            await self.client.write_gatt_char(UUID_WRITE, data, response=False)
+        except Exception as e:
+            # Failed! Enable safe mode and retry with response=True
+            if self.log_notifications:
+                print(f"BLE_SAFE_MODE: write_gatt_char failed ({e}), enabling safe mode")
+            self.safe_mode = True
+            await self.client.write_gatt_char(UUID_WRITE, data, response=True)
 
     async def _safe_disconnect(self) -> None:
         if self.client is None:
@@ -288,6 +345,19 @@ class BleDisplaySession:
                     except Exception:
                         pass
                 await self.client.start_notify(UUID_NOTIFY, self.watcher.handler)
+                
+                # Try to get adapter info for safe mode tracking
+                try:
+                    # Use a hash of the BleakClient's backend adapter as identifier
+                    # This helps track which adapter is being used
+                    import hashlib
+                    adapter_id = hashlib.md5(str(id(self.client)).encode()).hexdigest()[:8]
+                    self.adapter_address = f"adapter_{adapter_id}"
+                    self.adapter_name = "Local Bluetooth Adapter"
+                except Exception:
+                    self.adapter_address = "default_adapter"
+                    self.adapter_name = "Bluetooth Adapter"
+                
                 return
             except Exception as error:
                 if not self.auto_reconnect or attempt > self.max_retries:
@@ -350,7 +420,7 @@ class BleDisplaySession:
                 # Do handshake only if not already done
                 if not hasattr(self, '_handshake_done') or not self._handshake_done:
                     self.watcher.reset()
-                    await self.client.write_gatt_char(UUID_WRITE, HANDSHAKE_FIRST, response=False)
+                    await self._safe_write(HANDSHAKE_FIRST, "handshake1")
                     try:
                         await wait_for_ack(self.watcher.stage_one, "HANDSHAKE_STAGE_ONE", self.log_notifications)
                     except asyncio.TimeoutError:
@@ -360,7 +430,7 @@ class BleDisplaySession:
                     
                     self.watcher.stage_two.clear()
                     try:
-                        await self.client.write_gatt_char(UUID_WRITE, HANDSHAKE_SECOND, response=False)
+                        await self._safe_write(HANDSHAKE_SECOND, "handshake2")
                         await wait_for_ack(self.watcher.stage_two, "HANDSHAKE_STAGE_TWO", self.log_notifications)
                     except asyncio.TimeoutError:
                         if self.log_notifications:
@@ -371,7 +441,7 @@ class BleDisplaySession:
                 
                 # Send CMD_EDIT_END before image (like iPixel does)
                 # This command: 05 00 04 01 00
-                await self.client.write_gatt_char(UUID_WRITE, CMD_EDIT_END, response=False)
+                await self._safe_write(CMD_EDIT_END, "edit_end")
                 await asyncio.sleep(0.05)
                 
                 # Send frame data
@@ -419,7 +489,7 @@ class BleDisplaySession:
         if self.log_notifications:
             print("CMD_SEND", bytes_to_hex(command))
         
-        await self.client.write_gatt_char(UUID_WRITE, command, response=False)
+        await self._safe_write(command, "command")
         
         try:
             await asyncio.wait_for(self.watcher.command_ack.wait(), timeout=timeout)
@@ -775,7 +845,7 @@ class BleDisplaySession:
             # Do handshake only if not already done in this session
             if not hasattr(self, '_handshake_done') or not self._handshake_done:
                 self.watcher.reset()
-                await self.client.write_gatt_char(UUID_WRITE, HANDSHAKE_FIRST, response=False)
+                await self._safe_write(HANDSHAKE_FIRST, "gif_handshake1")
                 try:
                     await asyncio.wait_for(self.watcher.stage_one.wait(), timeout=2.0)
                     if self.log_notifications:
@@ -787,7 +857,7 @@ class BleDisplaySession:
                 await asyncio.sleep(delay)
                 
                 self.watcher.stage_two.clear()
-                await self.client.write_gatt_char(UUID_WRITE, HANDSHAKE_SECOND, response=False)
+                await self._safe_write(HANDSHAKE_SECOND, "gif_handshake2")
                 try:
                     await asyncio.wait_for(self.watcher.stage_two.wait(), timeout=1.0)
                     if self.log_notifications:
@@ -819,12 +889,8 @@ class BleDisplaySession:
                     ble_chunk = chunk_packet[offset:offset + MTU_SIZE]
                     total_ble_packets += 1
                     
-                    try:
-                        await self.client.write_gatt_char(UUID_WRITE, ble_chunk, response=False)
-                    except Exception as e:
-                        if self.log_notifications:
-                            print(f"GIF: BLE packet error: {e}, retrying with response=True")
-                        await self.client.write_gatt_char(UUID_WRITE, ble_chunk, response=True)
+                    # Use _safe_write for automatic fallback
+                    await self._safe_write(ble_chunk, f"gif_chunk_{chunk_idx}")
                     
                     offset += MTU_SIZE
                     await asyncio.sleep(0.005)  # Small delay between BLE packets
