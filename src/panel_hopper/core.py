@@ -175,6 +175,18 @@ async def close_all_sessions():
     PERSISTENT_SESSIONS.clear()
 
 
+async def disconnect_panel(mac: str) -> bool:
+    """Disconnect a specific panel's persistent session."""
+    mac = mac.upper()
+    if mac in PERSISTENT_SESSIONS:
+        session = PERSISTENT_SESSIONS[mac]
+        await session.disconnect()
+        del PERSISTENT_SESSIONS[mac]
+        logger.info(f"[{session.name}] Disconnected")
+        return True
+    return False
+
+
 class PanelController:
     """
     Controller for sending images to LED panels.
@@ -218,7 +230,7 @@ class PanelController:
         progress_callback: Optional[Callable[[str, str, bool], None]] = None
     ) -> tuple[bool, str]:
         """
-        Send an image to a single panel with retries.
+        Send an image to a single panel using the Panel Manager.
         
         Args:
             mac: Bluetooth MAC address of the panel.
@@ -229,97 +241,43 @@ class PanelController:
         Returns:
             Tuple of (success: bool, message: str)
         """
+        from panel_hopper.manager import get_manager
+        
         display_name = name or mac
+        manager = get_manager()
         
-        # Try persistent connection first (for ≤3 panels)
-        if self.use_persistent:
-            persistent = await get_persistent_session(mac, display_name)
-            if persistent and persistent.connected:
-                logger.info(f"[{display_name}] Using persistent connection...")
+        if progress_callback:
+            progress_callback(mac, "connecting", False)
+        
+        # Connect if not connected
+        if not manager.is_connected(mac):
+            logger.info(f"[{display_name}] Connecting via Panel Manager...")
+            if not await manager.connect(mac, name=display_name):
+                status = manager.get_status(mac)
+                error = status.get('error', 'Connection failed') if status else 'Connection failed'
+                logger.error(f"[{display_name}] Connection failed: {error}")
                 if progress_callback:
-                    progress_callback(mac, "sending", False)
-                
-                success = await persistent.send_frame(png_bytes, delay=self.delay)
-                if success:
-                    logger.info(f"[{display_name}] Sent successfully!")
-                    if progress_callback:
-                        progress_callback(mac, "success", True)
-                    return True, "OK"
-                else:
-                    logger.warning(f"[{display_name}] Persistent send failed, trying fresh connection...")
+                    progress_callback(mac, f"error: {error}", False)
+                return False, error
         
-        # Fall back to fresh connection
-        for attempt in range(1, self.retries + 1):
-            if attempt > 1:
-                logger.info(f"[{display_name}] Retry {attempt}/{self.retries}...")
-            else:
-                logger.info(f"[{display_name}] Connecting...")
-            
+        if progress_callback:
+            progress_callback(mac, "sending", False)
+        
+        logger.info(f"[{display_name}] Sending image...")
+        success = await manager.send_image(mac, png_bytes, delay=self.delay)
+        
+        if success:
+            logger.info(f"[{display_name}] Sent successfully!")
             if progress_callback:
-                progress_callback(mac, "connecting", False)
-            
-            session = None
-            try:
-                async def send_with_session():
-                    nonlocal session
-                    session = BleDisplaySession(
-                        address=mac,
-                        auto_reconnect=False,
-                        max_retries=1,
-                        scan_timeout=15,
-                        log_notifications=self.log_notifications,
-                    )
-                    await session._connect()
-                    logger.info(f"[{display_name}] Connected, sending...")
-                    
-                    if progress_callback:
-                        progress_callback(mac, "sending", False)
-                    
-                    await session.send_png(png_bytes, delay=self.delay)
-                    
-                    # Wait for panel to process image before disconnect
-                    await asyncio.sleep(0.5)
-                    
-                    logger.info(f"[{display_name}] Sent successfully!")
-                    return True
-                
-                result = await asyncio.wait_for(
-                    send_with_session(),
-                    timeout=self.timeout
-                )
-                
-                if progress_callback:
-                    progress_callback(mac, "success", True)
-                
-                return True, "OK"
-                
-            except asyncio.TimeoutError:
-                logger.error(f"[{display_name}] Timeout!")
-                if attempt == self.retries:
-                    if progress_callback:
-                        progress_callback(mac, "timeout", False)
-                    return False, "Connection timeout"
-                    
-            except Exception as e:
-                error_msg = str(e)
-                logger.error(f"[{display_name}] Error: {error_msg}")
-                if attempt == self.retries:
-                    if progress_callback:
-                        progress_callback(mac, f"error: {error_msg}", False)
-                    return False, error_msg
-                    
-            finally:
-                # Always try to disconnect cleanly (unless using persistent)
-                if session and not self.use_persistent:
-                    try:
-                        await session._safe_disconnect()
-                    except Exception:
-                        pass
-                
-                # Delay between attempts/panels for BLE stability
-                await asyncio.sleep(self.panel_delay)
-        
-        return False, "Max retries exceeded"
+                progress_callback(mac, "success", True)
+            return True, "OK"
+        else:
+            status = manager.get_status(mac)
+            error = status.get('error', 'Send failed') if status else 'Send failed'
+            logger.error(f"[{display_name}] Send failed: {error}")
+            if progress_callback:
+                progress_callback(mac, f"error: {error}", False)
+            return False, error
     
     async def send_to_multiple(
         self,

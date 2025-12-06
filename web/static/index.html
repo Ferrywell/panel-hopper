@@ -117,46 +117,7 @@
             opacity: 0.3;
         }
         
-        .sidebar-brightness {
-            margin-top: auto;
-            padding-top: 1rem;
-            border-top: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .sidebar-brightness .brightness-icon {
-            color: var(--text-dim);
-            font-size: 1rem;
-        }
-        
-        .sidebar-brightness input[type="range"] {
-            flex: 1;
-            height: 4px;
-            -webkit-appearance: none;
-            appearance: none;
-            background: var(--bg);
-            border-radius: 2px;
-            cursor: pointer;
-        }
-        
-        .sidebar-brightness input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: var(--accent);
-            cursor: pointer;
-            box-shadow: 0 0 6px rgba(255, 153, 0, 0.4);
-        }
-        
-        .sidebar-brightness .brightness-value {
-            font-size: var(--font-xs);
-            color: var(--text-dim);
-            min-width: 35px;
-            text-align: right;
-        }
+        /* Old sidebar brightness styles removed - now per-panel */
         
         .section-title {
             font-size: var(--font-xs);
@@ -167,50 +128,163 @@
         }
         
         /* Panel Items */
-        .panel-item {
-            display: flex;
-            align-items: center;
-            padding: 0.5rem 0.6rem;
-            margin-bottom: 0.25rem;
-            border-radius: 6px;
-            cursor: pointer;
+        /* Panel Card Design */
+        .panel-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            overflow: hidden;
             transition: all 0.15s;
-            gap: 0.5rem;
-            border: 1px solid transparent;
-            font-size: var(--font-sm);
-            min-height: 44px;
         }
         
-        .panel-item:hover { background: var(--surface-2); }
-        .panel-item.selected { background: var(--accent-glow); border-color: var(--accent); }
-        .panel-item.identifying { animation: glow 1s infinite; }
+        .panel-card:hover { border-color: var(--text-dim); }
+        .panel-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+        .panel-card.identifying { animation: glow 1s infinite; }
+        .panel-card.disabled { opacity: 0.6; }
         
         @keyframes glow {
             0%, 100% { box-shadow: 0 0 5px var(--accent); }
             50% { box-shadow: 0 0 20px var(--accent); }
         }
         
-        .panel-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
-        .panel-dot.disabled { background: var(--text-dim); }
+        .panel-header {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0.6rem;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
         
-        .panel-info { flex: 1; min-width: 0; overflow: hidden; }
-        .panel-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--font-sm); }
+        .panel-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
         
-        .panel-actions { display: flex; gap: 4px; }
+        .panel-status.connected { background: var(--success); box-shadow: 0 0 6px var(--success); }
+        .panel-status.disconnected { background: var(--text-dim); }
+        .panel-status.disabled { background: #555; }
+        
+        .panel-info { flex: 1; min-width: 0; }
+        .panel-name { 
+            display: block; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            font-size: var(--font-sm);
+            font-weight: 500;
+        }
+        .panel-mac {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            font-family: monospace;
+        }
+        
+        .panel-toggle-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .panel-toggle-btn:hover { border-color: var(--accent); color: var(--text); }
+        .panel-toggle-btn.connected { border-color: var(--success); color: var(--success); }
+        
+        .panel-controls {
+            display: none;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 0.6rem;
+            background: var(--bg);
+            border-top: 1px solid var(--border);
+        }
+        
+        .panel-card.selected .panel-controls {
+            display: flex;
+        }
+        
+        .panel-controls-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .panel-rotation {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.3rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            flex: 1;
+        }
+        
+        .panel-actions {
+            display: flex;
+            gap: 4px;
+        }
         
         .panel-btn {
-            font-size: var(--font-sm);
-            padding: 6px 8px;
+            font-size: 0.8rem;
+            padding: 0.3rem 0.5rem;
             border: 1px solid var(--border);
             border-radius: 4px;
             background: transparent;
             color: var(--text-dim);
             cursor: pointer;
-            min-width: 36px;
-            min-height: 36px;
+            transition: all 0.15s;
+            flex: 1;
         }
         
-        .panel-btn:hover, .panel-btn:active { border-color: var(--accent); color: var(--accent); }
+        .panel-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .panel-btn.danger:hover { border-color: var(--error); color: var(--error); }
+        
+        .panel-brightness {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.3rem 0;
+        }
+        
+        .panel-brightness label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            min-width: 20px;
+        }
+        
+        .panel-brightness input[type="range"] {
+            flex: 1;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: var(--surface);
+            border-radius: 2px;
+            cursor: pointer;
+        }
+        
+        .panel-brightness input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+        }
+        
+        .panel-brightness span {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            min-width: 30px;
+            text-align: right;
+        }
         
         .scan-status {
             padding: 0.5rem 0.75rem;
@@ -404,6 +478,84 @@
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
             gap: 0.75rem;
+        }
+        
+        /* iPixel Library Section */
+        .ipixel-section {
+            margin-top: 1.5rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.02);
+        }
+        
+        .ipixel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(135deg, rgba(138,43,226,0.15), rgba(255,105,180,0.1));
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+        
+        .ipixel-header:hover {
+            background: linear-gradient(135deg, rgba(138,43,226,0.25), rgba(255,105,180,0.2));
+        }
+        
+        .ipixel-header span:first-child {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        
+        .ipixel-count {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            background: var(--bg);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+        }
+        
+        .ipixel-toggle {
+            font-size: 0.8rem;
+            transition: transform 0.3s;
+        }
+        
+        .ipixel-toggle.open {
+            transform: rotate(180deg);
+        }
+        
+        .ipixel-content {
+            padding: 1rem;
+        }
+        
+        .ipixel-categories {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        
+        .ipixel-category {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.75rem;
+            border-radius: 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: capitalize;
+        }
+        
+        .ipixel-category:hover {
+            border-color: var(--primary);
+        }
+        
+        .ipixel-category.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
         }
         
         .image-card {
@@ -1025,13 +1177,6 @@
                 <div id="panels-list"></div>
                 <button class="btn-scan-subtle" id="btn-scan" onclick="scanPanels()">🔍 Scan for Panels</button>
             </div>
-            <div class="sidebar-brightness">
-                <span class="brightness-icon">☀</span>
-                <input type="range" id="brightness-slider" min="10" max="100" value="100" 
-                       oninput="updateBrightnessPreview(this.value)" 
-                       onchange="saveBrightness(this.value)">
-                <span class="brightness-value" id="brightness-value">100%</span>
-            </div>
         </aside>
         
         <div class="content">
@@ -1058,8 +1203,7 @@
                 <!-- Giphy Picker (disabled for now) -->
                 <div class="giphy-picker" id="giphy-picker" style="display:none;"></div>
                 
-                <div class="image-grid" id="image-grid"></div>
-                
+                <!-- Preview Section (ABOVE image grids) -->
                 <div class="image-preview-center" id="image-preview-section" style="display:none;">
                     <h4>Panel Preview (32×32)</h4>
                     <div class="preview-wrap">
@@ -1070,9 +1214,25 @@
                         <button class="btn" id="btn-send-all" disabled>⇒ All Panels</button>
                     </div>
                     <div id="gif-info" style="display:none;text-align:center;font-size:0.75rem;color:var(--text-dim);margin-top:0.5rem;">
-                        🎬 Animated GIF detected - click "Play Animation" to stream
+                        🎬 Animated GIF detected
                     </div>
                     <div class="loading" id="loading"><span class="spinner"></span> Sending...</div>
+                </div>
+                
+                <!-- Your Images -->
+                <div class="image-grid" id="image-grid"></div>
+                
+                <!-- iPixel GIFs Section -->
+                <div class="ipixel-section" id="ipixel-section">
+                    <div class="ipixel-header" onclick="toggleIpixelSection()">
+                        <span>🎨 iPixel Library</span>
+                        <span class="ipixel-count" id="ipixel-count">0 GIFs</span>
+                        <span class="ipixel-toggle" id="ipixel-toggle">▼</span>
+                    </div>
+                    <div class="ipixel-content" id="ipixel-content" style="display:none;">
+                        <div class="ipixel-categories" id="ipixel-categories"></div>
+                        <div class="image-grid" id="ipixel-grid"></div>
+                    </div>
                 </div>
             </div>
             
@@ -1274,6 +1434,12 @@
         let gridCols = 2, gridRows = 2;
         let identifyingMac = null;
         let customFonts = [];
+        
+        // iPixel GIFs state
+        let ipixelGifs = [];
+        let ipixelCategories = [];
+        let ipixelSelectedCategory = 'all';
+        let ipixelExpanded = false;
         let globalBrightness = 100;
         
         document.getElementById('year').textContent = new Date().getFullYear();
@@ -1293,37 +1459,82 @@
         }
         
         async function init() {
-            await Promise.all([loadPanels(), loadImages(), loadFonts(), loadBrightness()]);
+            await Promise.all([loadPanels(), loadImages(), loadFonts(), loadBrightness(), loadIpixelGifs()]);
             setupEventListeners();
             pollLogs();
+            pollConnectionStatus();  // Start connection status polling
             updateGridSize();
             updateTextPreview();
             renderEmojiGrid();
         }
         
+        // Connection status polling - keeps frontend in sync with backend
+        async function pollConnectionStatus() {
+            try {
+                const res = await fetch('/api/panels/status');
+                const data = await res.json();
+                
+                // Update local panel data with connection status from backend
+                if (data.panels && Array.isArray(data.panels)) {
+                    data.panels.forEach(status => {
+                        if (!status) return;
+                        const panel = panels.find(p => p.mac === status.mac);
+                        if (panel) {
+                            const wasConnected = panel.connected;
+                            panel.connected = status.connected;
+                            panel.brightness = status.brightness || panel.brightness;
+                            panel.rotation = status.rotation || panel.rotation;
+                            
+                            // Log connection changes
+                            if (wasConnected !== status.connected) {
+                                if (status.connected) {
+                                    addLog(`${panel.name}: Connected`, 'success');
+                                } else {
+                                    addLog(`${panel.name}: Disconnected`, 'warning');
+                                }
+                                renderPanels();  // Re-render to show new status
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                // Silently ignore polling errors
+            }
+            setTimeout(pollConnectionStatus, 3000);  // Poll every 3 seconds
+        }
+        
         // Brightness - only log on release
         async function loadBrightness() {
+            // Brightness is now per-panel, loaded separately
+        }
+        
+        // Panel Hardware Controls (discovered via iPixel BLE sniffing)
+        async function saveAsStartup() {
+            const enabledPanels = panels.filter(p => p.enabled);
+            if (enabledPanels.length === 0) {
+                addLog('No panels enabled', 'warning');
+                return;
+            }
+            
+            if (!confirm('Save the current display as the startup image on all enabled panels?\n\nThis will be shown when the panel powers on or loses connection.')) {
+                return;
+            }
+            
+            addLog('Saving startup image on all panels...', 'info');
+            
             try {
-                const res = await fetch('/api/brightness');
+                const res = await fetch('/api/panels/all/save-startup', { method: 'POST' });
                 const data = await res.json();
-                globalBrightness = Math.round(data.brightness * 100);
-                document.getElementById('brightness-slider').value = globalBrightness;
-                document.getElementById('brightness-value').textContent = globalBrightness + '%';
-            } catch (err) {}
-        }
-        
-        function updateBrightnessPreview(value) {
-            globalBrightness = parseInt(value);
-            document.getElementById('brightness-value').textContent = globalBrightness + '%';
-        }
-        
-        async function saveBrightness(value) {
-            const fd = new FormData();
-            fd.append('brightness', parseInt(value) / 100);
-            fd.append('log', 'true');
-            await fetch('/api/brightness', { method: 'POST', body: fd });
-            updateImagePreview();
-            updateGridPreview();
+                
+                const successCount = data.results.filter(r => r.success).length;
+                if (successCount > 0) {
+                    addLog(`✓ Startup image saved on ${successCount}/${enabledPanels.length} panels!`, 'success');
+                } else {
+                    addLog('Save failed - command not acknowledged', 'warning');
+                }
+            } catch (err) {
+                addLog(`Save error: ${err.message}`, 'error');
+            }
         }
         
         // Panels
@@ -1337,32 +1548,213 @@
             } catch (err) { console.error(err); }
         }
         
+        // Connection state is now managed by Panel Manager on server
+        
         function renderPanels() {
             const container = document.getElementById('panels-list');
             
             if (panels.length === 0) {
-                container.innerHTML = '<div class="no-panels"><p>No panels found</p><button class="btn primary" onclick="scanPanels()">🔍 Scan for Panels</button></div>';
+                container.innerHTML = `
+                    <div class="no-panels">
+                        <p>No panels found</p>
+                        <p style="font-size:0.7rem;margin:0.5rem 0;">Click Scan to discover nearby LED panels</p>
+                    </div>`;
                 return;
             }
             
-            container.innerHTML = panels.map((p, i) => `
-                <div class="panel-item ${selectedPanel === p.mac ? 'selected' : ''} ${identifyingMac === p.mac ? 'identifying' : ''}" data-mac="${p.mac}">
-                    <span class="panel-dot ${p.enabled ? '' : 'disabled'}"></span>
-                    <div class="panel-info"><span class="panel-name">${p.name}</span></div>
-                    <div class="panel-actions">
-                        <button class="panel-btn" onclick="event.stopPropagation();identifyPanel('${p.mac}', ${i + 1})" title="Identify">🔦</button>
-                        <button class="panel-btn" onclick="event.stopPropagation();openRenameModal('${p.mac}', '${p.name}')" title="Rename">✎</button>
-                        <button class="panel-btn" onclick="event.stopPropagation();togglePanel('${p.mac}')">${p.enabled ? '○' : '●'}</button>
+            container.innerHTML = panels.map((p, i) => {
+                // Use server-side connection status (from Panel Manager)
+                const isConnected = p.connected || false;
+                const isSelected = selectedPanel === p.mac;
+                const statusClass = !p.enabled ? 'disabled' : (isConnected ? 'connected' : 'disconnected');
+                
+                // Get brightness and rotation from server
+                const brightness = p.brightness || 100;
+                const rotation = p.rotation || 0;
+                
+                // Determine button text based on state
+                let connectBtnText, connectBtnClass;
+                if (!p.enabled) {
+                    connectBtnText = 'Disabled';
+                    connectBtnClass = 'disabled-state';
+                } else if (isConnected) {
+                    connectBtnText = '⚡ Connected';
+                    connectBtnClass = 'connected';
+                } else {
+                    connectBtnText = '🔌 Connect';
+                    connectBtnClass = '';
+                }
+                
+                return `
+                <div class="panel-card ${isSelected ? 'selected' : ''} ${identifyingMac === p.mac ? 'identifying' : ''} ${!p.enabled ? 'disabled' : ''}" data-mac="${p.mac}">
+                    <div class="panel-header" onclick="selectPanel('${p.mac}')">
+                        <span class="panel-status ${statusClass}"></span>
+                        <div class="panel-info">
+                            <span class="panel-name">${p.name}</span>
+                            <span class="panel-mac">${p.mac}</span>
+                        </div>
+                        <button class="panel-toggle-btn ${connectBtnClass}" 
+                                onclick="event.stopPropagation();toggleConnection('${p.mac}')"
+                                title="${isConnected ? 'Disconnect' : 'Connect'}">
+                            ${connectBtnText}
+                        </button>
                     </div>
-                </div>
-            `).join('');
-            
-            container.querySelectorAll('.panel-item').forEach(el => {
-                el.addEventListener('click', () => { selectedPanel = el.dataset.mac; renderPanels(); updateButtons(); });
-            });
+                    
+                    <div class="panel-controls">
+                        <!-- Brightness -->
+                        <div class="panel-brightness">
+                            <label>☀</label>
+                            <input type="range" min="1" max="100" value="${brightness}" 
+                                   oninput="this.nextElementSibling.textContent = this.value + '%'"
+                                   onchange="setPanelBrightness('${p.mac}', this.value)">
+                            <span>${brightness}%</span>
+                        </div>
+                        
+                        <!-- Rotation -->
+                        <div class="panel-controls-row">
+                            <select class="panel-rotation" 
+                                    onclick="event.stopPropagation()" 
+                                    onchange="setPanelRotation('${p.mac}', this.value)">
+                                <option value="0" ${rotation === 0 ? 'selected' : ''}>↻ 0°</option>
+                                <option value="1" ${rotation === 1 ? 'selected' : ''}>↻ 90°</option>
+                                <option value="2" ${rotation === 2 ? 'selected' : ''}>↻ 180°</option>
+                                <option value="3" ${rotation === 3 ? 'selected' : ''}>↻ 270°</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Actions Row -->
+                        <div class="panel-controls-row">
+                            <button class="panel-btn" onclick="event.stopPropagation();identifyPanel('${p.mac}', ${i + 1})" title="Flash panel with number">
+                                🔦 Identify
+                            </button>
+                            <button class="panel-btn" onclick="event.stopPropagation();openRenameModal('${p.mac}', '${p.name}')" title="Rename panel">
+                                ✎ Rename
+                            </button>
+                        </div>
+                        
+                        <!-- Enable/Disable -->
+                        <div class="panel-controls-row">
+                            <button class="panel-btn ${p.enabled ? 'danger' : ''}" 
+                                    onclick="event.stopPropagation();togglePanel('${p.mac}')"
+                                    style="width:100%;">
+                                ${p.enabled ? '○ Disable Panel' : '✓ Enable Panel'}
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
         }
         
-        async function togglePanel(mac) { await fetch(`/api/panels/${mac}/toggle`, { method: 'POST' }); await loadPanels(); }
+        function selectPanel(mac) {
+            selectedPanel = mac;
+            renderPanels();
+            updateButtons();
+        }
+        
+        async function togglePanel(mac) { 
+            console.log('togglePanel called:', mac);
+            try {
+                const res = await fetch(`/api/panels/${encodeURIComponent(mac)}/toggle`, { method: 'POST' }); 
+                console.log('Toggle response:', res.status);
+                await loadPanels();
+            } catch (err) {
+                console.error('Toggle error:', err);
+                addLog(`Toggle failed: ${err.message}`, 'error');
+            }
+        }
+        
+        async function toggleConnection(mac) {
+            console.log('toggleConnection called:', mac);
+            const panel = panels.find(p => p.mac === mac);
+            const name = panel ? panel.name : mac;
+            // Use server-side connection status
+            const isConnected = panel ? panel.connected : false;
+            
+            if (isConnected) {
+                // Disconnect
+                addLog(`Disconnecting ${name}...`, 'info');
+                try {
+                    const res = await fetch(`/api/panels/${encodeURIComponent(mac)}/disconnect`, { method: 'POST' });
+                    await res.json();
+                    // Reload panels to get updated status from Panel Manager
+                    await loadPanels();
+                    addLog(`${name}: Disconnected`, 'info');
+                } catch (err) {
+                    console.error('Disconnect error:', err);
+                    addLog(`Disconnect failed: ${err.message}`, 'error');
+                }
+            } else {
+                // Connect
+                addLog(`Connecting to ${name}...`, 'info');
+                try {
+                    const fd = new FormData();
+                    fd.append('panel_mac', mac);
+                    const res = await fetch('/api/panels/connect', { method: 'POST', body: fd });
+                    const data = await res.json();
+                    
+                    if (data.status === 'ok' || data.connected) {
+                        // Reload panels to get updated status from Panel Manager
+                        await loadPanels();
+                        addLog(`${name}: Connected ✓`, 'success');
+                    } else {
+                        addLog(`${name}: Connection failed - ${data.message || 'unknown error'}`, 'error');
+                    }
+                } catch (err) {
+                    console.error('Connect error:', err);
+                    addLog(`Connect failed: ${err.message}`, 'error');
+                }
+            }
+        }
+        
+        async function setPanelRotation(mac, rotation) {
+            console.log('setPanelRotation called:', mac, rotation);
+            const panel = panels.find(p => p.mac === mac);
+            const name = panel ? panel.name : mac;
+            const rotationDeg = parseInt(rotation) * 90;
+            
+            addLog(`${name}: Setting rotation to ${rotationDeg}°...`, 'info');
+            
+            try {
+                const fd = new FormData();
+                fd.append('rotation', rotation);
+                const res = await fetch(`/api/panels/${encodeURIComponent(mac)}/rotation`, { method: 'POST', body: fd });
+                const data = await res.json();
+                
+                if (data.status === 'ok') {
+                    // Reload panels to get updated status
+                    await loadPanels();
+                    addLog(`${name}: Rotation ${rotationDeg}° ✓`, 'success');
+                } else {
+                    addLog(`${name}: Rotation command not acknowledged`, 'warning');
+                }
+            } catch (err) {
+                console.error('Rotation error:', err);
+                addLog(`${name}: Rotation failed - ${err.message}`, 'error');
+            }
+        }
+        
+        async function setPanelBrightness(mac, value) {
+            const panel = panels.find(p => p.mac === mac);
+            const name = panel ? panel.name : mac;
+            
+            try {
+                const fd = new FormData();
+                fd.append('brightness', value);
+                const res = await fetch(`/api/panels/${encodeURIComponent(mac)}/brightness`, { method: 'POST', body: fd });
+                const data = await res.json();
+                
+                if (data.status === 'ok') {
+                    // Reload panels to get updated status
+                    await loadPanels();
+                    addLog(`${name}: Brightness ${value}% ✓`, 'success');
+                } else {
+                    addLog(`${name}: Brightness not acknowledged`, 'warning');
+                }
+            } catch (err) {
+                console.error('Brightness error:', err);
+                addLog(`${name}: Brightness failed - ${err.message}`, 'error');
+            }
+        }
         
         async function scanPanels() {
             const btn = document.getElementById('btn-scan');
@@ -1458,7 +1850,7 @@
                     if (e.target.classList.contains('image-delete')) return;
                     selectedImage = el.dataset.path;
                     selectedImageData = images.find(i => i.path === selectedImage);
-                    renderImages(); updateButtons(); updateImagePreview(); updateGridPreview();
+                    renderImages(); renderIpixelGifs(); updateButtons(); updateImagePreview(); updateGridPreview();
                 });
             });
             
@@ -1477,11 +1869,96 @@
             });
         }
         
+        // iPixel GIFs
+        async function loadIpixelGifs() {
+            try {
+                const res = await fetch('/api/ipixel-gifs');
+                const data = await res.json();
+                ipixelGifs = data.gifs || [];
+                ipixelCategories = data.categories || [];
+                document.getElementById('ipixel-count').textContent = `${ipixelGifs.length} GIFs`;
+                renderIpixelGifs();
+            } catch (err) { 
+                console.error('Failed to load iPixel GIFs:', err);
+            }
+        }
+        
+        function toggleIpixelSection() {
+            ipixelExpanded = !ipixelExpanded;
+            document.getElementById('ipixel-content').style.display = ipixelExpanded ? 'block' : 'none';
+            document.getElementById('ipixel-toggle').classList.toggle('open', ipixelExpanded);
+        }
+        
+        function filterIpixelCategory(category) {
+            ipixelSelectedCategory = category;
+            renderIpixelGifs();
+        }
+        
+        function renderIpixelGifs() {
+            // Render categories
+            const catContainer = document.getElementById('ipixel-categories');
+            const allCategories = ['all', ...ipixelCategories.filter(c => c !== 'general')];
+            catContainer.innerHTML = allCategories.map(cat => `
+                <button class="ipixel-category ${ipixelSelectedCategory === cat ? 'active' : ''}" 
+                        onclick="filterIpixelCategory('${cat}')">${cat}</button>
+            `).join('');
+            
+            // Filter and render GIFs
+            const filteredGifs = ipixelSelectedCategory === 'all' 
+                ? ipixelGifs 
+                : ipixelGifs.filter(g => g.category === ipixelSelectedCategory);
+            
+            const grid = document.getElementById('ipixel-grid');
+            grid.innerHTML = filteredGifs.map(gif => `
+                <div class="image-card ${selectedImage === gif.path ? 'selected' : ''} ${gif.is_gif ? 'gif' : ''}" 
+                     data-path="${gif.path}" data-animated="true" data-ipixel="true">
+                    <img src="${gif.path}" alt="${gif.name}" loading="lazy">
+                    <span class="image-name">${gif.name.substring(0, 15)}${gif.name.length > 15 ? '...' : ''}</span>
+                </div>
+            `).join('');
+            
+            // Add click handlers
+            grid.querySelectorAll('.image-card').forEach(el => {
+                el.addEventListener('click', () => {
+                    selectedImage = el.dataset.path;
+                    selectedImageData = { 
+                        path: el.dataset.path, 
+                        is_gif: el.classList.contains('gif'),
+                        is_animated: true,
+                        name: el.querySelector('.image-name').textContent
+                    };
+                    renderImages();
+                    renderIpixelGifs();
+                    updateButtons();
+                    updateIpixelPreview();
+                    updateGridPreview();
+                });
+            });
+        }
+        
+        function updateIpixelPreview() {
+            const img = document.getElementById('image-preview');
+            const previewSection = document.getElementById('image-preview-section');
+            
+            if (selectedImage && selectedImage.includes('ipixel_gifs')) {
+                // For iPixel GIFs, show directly (they're already optimized for LED panels)
+                img.src = `${selectedImage}?_=${Date.now()}`;
+                previewSection.style.display = 'flex';
+            }
+        }
+        
         function updateImagePreview() {
             const img = document.getElementById('image-preview');
             const previewSection = document.getElementById('image-preview-section');
             
             if (selectedImage) {
+                // Check if it's an iPixel GIF
+                if (selectedImage.includes('ipixel_gifs')) {
+                    img.src = `${selectedImage}?_=${Date.now()}`;
+                    previewSection.style.display = 'flex';
+                    return;
+                }
+                
                 const isAnimated = selectedImageData?.is_animated;
                 const animParam = isAnimated ? '&animated=true' : '';
                 // Use LED-style rendering for realistic panel preview
@@ -1883,12 +2360,43 @@
             document.getElementById('loading').classList.add('active');
             
             const fd = new FormData();
-            fd.append('image_path', selectedImage.replace('/assets/', ''));
             
-            let endpoint = '/api/send/' + (mode === 'single' ? 'single' : 'all');
-            if (mode === 'single') fd.append('panel_mac', selectedPanel);
+            // Check if it's an iPixel GIF (from /static/ipixel_gifs/)
+            if (selectedImage.includes('ipixel_gifs')) {
+                // For iPixel GIFs, fetch the image and send as base64
+                try {
+                    const response = await fetch(selectedImage);
+                    const blob = await response.blob();
+                    const base64 = await new Promise(resolve => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                        reader.readAsDataURL(blob);
+                    });
+                    
+                    fd.append('image_data', base64);
+                    fd.append('filename', selectedImage.split('/').pop());
+                    
+                    // Use /api/send/base64 for single, /api/send/base64/all for all panels
+                    if (mode === 'single') {
+                        fd.append('panel_mac', selectedPanel);
+                        await fetch('/api/send/base64', { method: 'POST', body: fd });
+                    } else {
+                        await fetch('/api/send/base64/all', { method: 'POST', body: fd });
+                    }
+                } catch (err) {
+                    console.error('Failed to send iPixel GIF:', err);
+                    addLog('Failed to send iPixel GIF: ' + err.message, 'error');
+                }
+            } else {
+                // Regular image from /assets/
+                fd.append('image_path', selectedImage.replace('/assets/', ''));
+                
+                let endpoint = '/api/send/' + (mode === 'single' ? 'single' : 'all');
+                if (mode === 'single') fd.append('panel_mac', selectedPanel);
+                
+                try { await fetch(endpoint, { method: 'POST', body: fd }); } catch (err) {}
+            }
             
-            try { await fetch(endpoint, { method: 'POST', body: fd }); } catch (err) {}
             document.getElementById('loading').classList.remove('active');
         }
         
@@ -1960,6 +2468,15 @@
         }
         
         function clearLogs() { logs = []; renderLogs(); }
+        
+        function addLog(message, level = 'info') {
+            const now = new Date();
+            const time = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            logs.push({ time, message, level });
+            // Keep only last 100 logs
+            if (logs.length > 100) logs = logs.slice(-100);
+            renderLogs();
+        }
         
         // Event Listeners
         function setupEventListeners() {

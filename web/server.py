@@ -35,8 +35,10 @@ GIPHY_API_KEY = "dc6zaTOxFJmzC"  # Public beta key
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "vendor"))
 
-from panel_hopper.core import PanelController, scan_for_panels, setup_logging, PersistentSession, get_persistent_session
+from panel_hopper.manager import get_manager, PanelManager
+from panel_hopper.core import PanelController, scan_for_panels, setup_logging
 from panel_hopper.config import load_config, save_config, Panel
 from panel_hopper.graphics import (
     resize_for_panel,
@@ -162,6 +164,25 @@ app.add_middleware(
 
 
 # =============================================================================
+# Startup/Shutdown Events
+# =============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Start the connection monitor when the app starts."""
+    manager = get_manager()
+    await manager.start_monitoring()
+    add_log("Connection monitor started", "info")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop the connection monitor when the app shuts down."""
+    manager = get_manager()
+    await manager.stop_monitoring()
+    add_log("Connection monitor stopped", "info")
+
+
+# =============================================================================
 # Static Files & Frontend
 # =============================================================================
 
@@ -222,6 +243,49 @@ async def list_images():
                 })
     
     return {"images": images}
+
+
+# iPixel GIFs Directory
+IPIXEL_GIFS_DIR = STATIC_DIR / "ipixel_gifs"
+
+
+@app.get("/api/ipixel-gifs")
+async def list_ipixel_gifs():
+    """
+    List all iPixel GIFs extracted from the iPixel app.
+    These are pre-made animations that work great on LED panels.
+    """
+    gifs = []
+    
+    if not IPIXEL_GIFS_DIR.exists():
+        return {"categories": [], "gifs": []}
+    
+    # Get categories (subdirectories)
+    categories = []
+    for item in sorted(IPIXEL_GIFS_DIR.iterdir()):
+        if item.is_dir():
+            categories.append(item.name)
+            # Get GIFs in category
+            for file in sorted(item.iterdir()):
+                if file.suffix.lower() in ['.gif', '.jpg', '.png']:
+                    gifs.append({
+                        "name": file.name,
+                        "path": f"/static/ipixel_gifs/{item.name}/{file.name}",
+                        "category": item.name,
+                        "is_gif": file.suffix.lower() == '.gif',
+                    })
+    
+    # Get root-level GIFs
+    for file in sorted(IPIXEL_GIFS_DIR.iterdir()):
+        if file.is_file() and file.suffix.lower() in ['.gif', '.jpg', '.png']:
+            gifs.append({
+                "name": file.name,
+                "path": f"/static/ipixel_gifs/{file.name}",
+                "category": "general",
+                "is_gif": file.suffix.lower() == '.gif',
+            })
+    
+    return {"categories": ["general"] + categories, "gifs": gifs}
 
 
 @app.get("/assets/{folder}/{filename}")
@@ -385,23 +449,286 @@ async def set_brightness(brightness: float = Form(...), log: bool = Form(False))
 
 
 # =============================================================================
+# Panel Hardware Control Endpoints (discovered via iPixel BLE sniffing)
+# =============================================================================
+
+@app.post("/api/panels/{mac}/brightness")
+async def set_panel_hardware_brightness(mac: str, brightness: int = Form(...)):
+    """
+    Set hardware brightness directly on a panel using Panel Manager.
+    
+    Args:
+        mac: Panel MAC address
+        brightness: Brightness 0-100
+    """
+    mac = mac.upper()
+    config = load_config()
+    
+    if mac not in config.panels:
+        raise HTTPException(404, "Panel not found")
+    
+    panel = config.panels[mac]
+    manager = get_manager()
+    
+    # Auto-connect if not connected
+    if not manager.is_connected(mac):
+        add_log(f"Connecting to {panel.name}...", "info")
+        if not await manager.connect(mac, name=panel.name):
+            add_log(f"{panel.name}: Connection failed", "error")
+            raise HTTPException(500, "Connection failed")
+    
+    success = await manager.set_brightness(mac, brightness)
+    
+    if success:
+        add_log(f"{panel.name}: Brightness {brightness}%", "success")
+        return {"status": "ok", "brightness": brightness}
+    else:
+        add_log(f"{panel.name}: Brightness command failed", "warning")
+        return {"status": "warning", "message": "Command not acknowledged"}
+
+
+@app.post("/api/panels/{mac}/rotation")
+async def set_panel_rotation(mac: str, rotation: int = Form(...)):
+    """
+    Set display rotation on a panel using Panel Manager.
+    
+    Args:
+        mac: Panel MAC address
+        rotation: 0=0°, 1=90°, 2=180°, 3=270°
+    """
+    mac = mac.upper()
+    config = load_config()
+    
+    if mac not in config.panels:
+        raise HTTPException(404, "Panel not found")
+    
+    panel = config.panels[mac]
+    rotation_deg = rotation * 90
+    manager = get_manager()
+    
+    # Auto-connect if not connected
+    if not manager.is_connected(mac):
+        add_log(f"Connecting to {panel.name}...", "info")
+        if not await manager.connect(mac, name=panel.name):
+            add_log(f"{panel.name}: Connection failed", "error")
+            raise HTTPException(500, "Connection failed")
+    
+    success = await manager.set_rotation(mac, rotation)
+    
+    if success:
+        add_log(f"{panel.name}: Rotation {rotation_deg}°", "success")
+        return {"status": "ok", "rotation": rotation}
+    else:
+        add_log(f"{panel.name}: Rotation command failed", "warning")
+        return {"status": "warning", "message": "Command not acknowledged"}
+
+
+@app.post("/api/panels/{mac}/save-startup")
+async def save_panel_startup(mac: str):
+    """
+    Save the currently displayed image as the startup/idle image using Panel Manager.
+    
+    Args:
+        mac: Panel MAC address
+    """
+    mac = mac.upper()
+    config = load_config()
+    
+    if mac not in config.panels:
+        raise HTTPException(404, "Panel not found")
+    
+    panel = config.panels[mac]
+    manager = get_manager()
+    
+    # Auto-connect if not connected
+    if not manager.is_connected(mac):
+        add_log(f"Connecting to {panel.name}...", "info")
+        if not await manager.connect(mac, name=panel.name):
+            add_log(f"{panel.name}: Connection failed", "error")
+            raise HTTPException(500, "Connection failed")
+    
+    success = await manager.save_as_startup(mac)
+    
+    if success:
+        add_log(f"{panel.name}: Startup image saved! ✓", "success")
+        return {"status": "ok", "message": "Startup image saved"}
+    else:
+        add_log(f"{panel.name}: Save command failed", "warning")
+        return {"status": "warning", "message": "Command not acknowledged"}
+
+
+@app.post("/api/panels/{mac}/on-off")
+async def set_panel_on_off(mac: str, on: bool = Form(...)):
+    """
+    Turn panel display on or off using Panel Manager.
+    
+    Based on iPixel sendLedOnOff command.
+    
+    Args:
+        mac: Panel MAC address
+        on: True = on, False = off
+    """
+    config = load_config()
+    mac = mac.upper()
+    
+    panel = config.get_panel_by_mac(mac)
+    if not panel:
+        raise HTTPException(404, f"Panel {mac} not found")
+    
+    manager = get_manager()
+    
+    # Auto-connect if not connected
+    if not manager.is_connected(mac):
+        if not await manager.connect(mac, name=panel.name):
+            raise HTTPException(500, f"Failed to connect to panel")
+    
+    success = await manager.set_on_off(mac, on)
+    
+    state = "on" if on else "off"
+    if success:
+        add_log(f"{panel.name}: Display turned {state}", "success")
+        return {"status": "ok", "on": on}
+    else:
+        add_log(f"{panel.name}: On/Off command failed", "warning")
+        return {"status": "warning", "message": "Command not acknowledged"}
+
+
+@app.post("/api/panels/{mac}/delete-all")
+async def delete_panel_data(mac: str):
+    """
+    Delete all saved data from a panel using Panel Manager.
+    
+    Based on iPixel deleteAllData command.
+    
+    Args:
+        mac: Panel MAC address
+    """
+    config = load_config()
+    mac = mac.upper()
+    
+    panel = config.get_panel_by_mac(mac)
+    if not panel:
+        raise HTTPException(404, f"Panel {mac} not found")
+    
+    manager = get_manager()
+    
+    # Auto-connect if not connected
+    if not manager.is_connected(mac):
+        if not await manager.connect(mac, name=panel.name):
+            raise HTTPException(500, f"Failed to connect to panel")
+    
+    success = await manager.delete_all_data(mac)
+    
+    if success:
+        add_log(f"{panel.name}: All data deleted", "success")
+        return {"status": "ok", "message": "All data deleted"}
+    else:
+        add_log(f"{panel.name}: Delete command failed", "warning")
+        return {"status": "warning", "message": "Command not acknowledged"}
+
+
+@app.post("/api/panels/all/brightness")
+async def set_all_panels_brightness(value: int = Form(...)):
+    """Set hardware brightness on all enabled panels using Panel Manager."""
+    config = load_config()
+    enabled_panels = [p for p in config.panels.values() if p.enabled]
+    
+    if not enabled_panels:
+        raise HTTPException(400, "No panels enabled")
+    
+    manager = get_manager()
+    results = []
+    
+    for panel in enabled_panels:
+        # Auto-connect if not connected
+        if not manager.is_connected(panel.mac):
+            await manager.connect(panel.mac, name=panel.name)
+        
+        success = await manager.set_brightness(panel.mac, value)
+        results.append({"mac": panel.mac, "name": panel.name, "success": success})
+    
+    success_count = sum(1 for r in results if r.get("success"))
+    add_log(f"Brightness {value}% on {success_count}/{len(enabled_panels)} panels", "info")
+    
+    return {"results": results}
+
+
+@app.post("/api/panels/all/rotation")
+async def set_all_panels_rotation(rotation: int = Form(...)):
+    """Set rotation on all enabled panels using Panel Manager."""
+    config = load_config()
+    enabled_panels = [p for p in config.panels.values() if p.enabled]
+    
+    if not enabled_panels:
+        raise HTTPException(400, "No panels enabled")
+    
+    manager = get_manager()
+    results = []
+    
+    for panel in enabled_panels:
+        # Auto-connect if not connected
+        if not manager.is_connected(panel.mac):
+            await manager.connect(panel.mac, name=panel.name)
+        
+        success = await manager.set_rotation(panel.mac, rotation)
+        results.append({"mac": panel.mac, "name": panel.name, "success": success})
+    
+    rotation_deg = rotation * 90
+    success_count = sum(1 for r in results if r.get("success"))
+    add_log(f"Rotation {rotation_deg}° on {success_count}/{len(enabled_panels)} panels", "info")
+    
+    return {"results": results}
+
+
+@app.post("/api/panels/all/save-startup")
+async def save_all_panels_startup():
+    """Save startup image on all enabled panels using Panel Manager."""
+    config = load_config()
+    enabled_panels = [p for p in config.panels.values() if p.enabled]
+    
+    if not enabled_panels:
+        raise HTTPException(400, "No panels enabled")
+    
+    manager = get_manager()
+    results = []
+    
+    for panel in enabled_panels:
+        # Auto-connect if not connected
+        if not manager.is_connected(panel.mac):
+            await manager.connect(panel.mac, name=panel.name)
+        
+        success = await manager.save_as_startup(panel.mac)
+        results.append({"mac": panel.mac, "name": panel.name, "success": success})
+    
+    success_count = sum(1 for r in results if r.get("success"))
+    add_log(f"Startup saved on {success_count}/{len(enabled_panels)} panels", "success")
+    
+    return {"results": results}
+
+
+# =============================================================================
 # Panel Endpoints
 # =============================================================================
 
 @app.get("/api/panels")
 async def list_panels():
-    """List all configured panels."""
+    """List all configured panels with connection status from Panel Manager."""
     config = load_config()
-    panels = [
-        {
+    manager = get_manager()
+    
+    panels = []
+    for p in sorted(config.panels.values(), key=lambda x: x.order):
+        status = manager.get_status(p.mac)
+        panels.append({
             "mac": p.mac,
             "name": p.name,
             "enabled": p.enabled,
             "order": p.order,
             "grid_position": p.grid_position,
-        }
-        for p in sorted(config.panels.values(), key=lambda x: x.order)
-    ]
+            "connected": status.get("connected", False) if status else False,
+            "brightness": status.get("brightness", 100) if status else 100,
+            "rotation": status.get("rotation", 0) if status else 0,
+        })
     
     grid = {
         "linksboven": config.grid.linksboven,
@@ -411,6 +738,16 @@ async def list_panels():
     }
     
     return {"panels": panels, "grid": grid, "brightness": GLOBAL_BRIGHTNESS}
+
+
+@app.get("/api/panels/status")
+async def get_panels_status():
+    """Get real-time connection status from Panel Manager."""
+    manager = get_manager()
+    return {
+        "connected": manager.list_connected(),
+        "panels": manager.list_panels(),
+    }
 
 
 @app.post("/api/panels/scan")
@@ -461,6 +798,46 @@ async def toggle_panel(mac: str):
     add_log(f"{config.panels[mac].name}: {state}", "info")
     
     return {"status": "ok", "enabled": config.panels[mac].enabled}
+
+
+@app.post("/api/panels/{mac}/disconnect")
+async def disconnect_panel_endpoint(mac: str):
+    """Disconnect a panel's BLE session using Panel Manager."""
+    config = load_config()
+    mac = mac.upper()
+    
+    panel = config.get_panel_by_mac(mac)
+    name = panel.name if panel else mac
+    
+    manager = get_manager()
+    result = await manager.disconnect(mac)
+    
+    add_log(f"{name}: Disconnected", "info")
+    return {"status": "ok", "message": "Disconnected", "connected": False}
+
+
+@app.post("/api/panels/connect")
+async def connect_panel_endpoint(panel_mac: str = Form(...)):
+    """Connect to a panel using Panel Manager."""
+    config = load_config()
+    mac = panel_mac.upper()
+    
+    panel = config.get_panel_by_mac(mac)
+    name = panel.name if panel else mac
+    
+    add_log(f"Connecting to {name}...", "info")
+    
+    manager = get_manager()
+    success = await manager.connect(mac, name=name)
+    
+    if success:
+        add_log(f"{name}: Connected ✓", "success")
+        return {"status": "ok", "connected": True, "message": "Connected"}
+    else:
+        status = manager.get_status(mac)
+        error = status.get('error', 'Connection failed') if status else 'Connection failed'
+        add_log(f"{name}: Connection failed - {error}", "error")
+        return {"status": "error", "connected": False, "message": error}
 
 
 @app.post("/api/panels/{mac}/rename")
@@ -603,7 +980,7 @@ async def send_to_single(
     font_size: int = Form(18),
     font_style: str = Form("regular"),
 ):
-    """Send image or text to a single panel."""
+    """Send image, GIF, or text to a single panel."""
     config = load_config()
     panel = config.get_panel_by_mac(panel_mac)
     
@@ -612,29 +989,64 @@ async def send_to_single(
     
     add_log(f"Sending to {panel.name}...", "info")
     
-    # Prepare image
+    manager = get_manager()
+    
+    # Auto-connect if not connected
+    if not manager.is_connected(panel.mac):
+        add_log(f"Connecting to {panel.name}...", "info")
+        if not await manager.connect(panel.mac, name=panel.name):
+            add_log(f"{panel.name}: Connection failed", "error")
+            return {"status": "error", "message": "Connection failed"}
+    
+    # Prepare and send content
     if text:
         bold = font_style in ['bold', 'bold-italic']
         italic = font_style in ['italic', 'bold-italic']
         img = create_multiline_text_image(text, PANEL_SIZE, color, bg_color, font_name, font_size, bold, italic)
+        
+        # Apply brightness
+        if GLOBAL_BRIGHTNESS < 1.0:
+            from PIL import ImageEnhance
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(GLOBAL_BRIGHTNESS)
+        
+        png_bytes = to_png_bytes(img)
+        success = await manager.send_image(panel.mac, png_bytes)
+        message = "OK" if success else "Send failed"
+        
     elif image_path:
         full_path = ASSETS_DIR / image_path.replace("/assets/", "")
         if not full_path.exists():
             raise HTTPException(404, "Image not found")
-        img = resize_for_panel(full_path)
+        
+        # Check if it's an animated GIF
+        is_animated_gif = False
+        if full_path.suffix.lower() == '.gif':
+            with Image.open(full_path) as check_img:
+                is_animated_gif = getattr(check_img, 'is_animated', False)
+        
+        if is_animated_gif:
+            # Send as animated GIF
+            add_log(f"Sending animated GIF to {panel.name}...", "info")
+            with open(full_path, 'rb') as f:
+                gif_bytes = f.read()
+            success = await manager.send_gif(panel.mac, gif_bytes)
+            message = "GIF sent" if success else "GIF send failed"
+        else:
+            # Send as static image
+            img = resize_for_panel(full_path)
+            
+            # Apply brightness
+            if GLOBAL_BRIGHTNESS < 1.0:
+                from PIL import ImageEnhance
+                enhancer = ImageEnhance.Brightness(img)
+                img = enhancer.enhance(GLOBAL_BRIGHTNESS)
+            
+            png_bytes = to_png_bytes(img)
+            success = await manager.send_image(panel.mac, png_bytes)
+            message = "OK" if success else "Send failed"
     else:
         raise HTTPException(400, "Provide image_path or text")
-    
-    # Apply brightness
-    if GLOBAL_BRIGHTNESS < 1.0:
-        from PIL import ImageEnhance
-        enhancer = ImageEnhance.Brightness(img)
-        img = enhancer.enhance(GLOBAL_BRIGHTNESS)
-    
-    png_bytes = to_png_bytes(img)
-    
-    controller = PanelController()
-    success, message = await controller.send_to_panel(panel.mac, png_bytes, panel.name)
     
     if success:
         add_log(f"✓ {panel.name}: sent", "success")
@@ -654,7 +1066,7 @@ async def send_to_all(
     font_size: int = Form(18),
     font_style: str = Form("regular"),
 ):
-    """Send to all enabled panels."""
+    """Send to all enabled panels (supports animated GIFs)."""
     config = load_config()
     enabled = config.get_enabled_panels()
     
@@ -663,40 +1075,71 @@ async def send_to_all(
     
     add_log(f"Sending to {len(enabled)} panels...", "info")
     
-    # Prepare image
+    manager = get_manager()
+    is_animated_gif = False
+    gif_bytes = None
+    png_bytes = None
+    
+    # Prepare content
     if text:
         bold = font_style in ['bold', 'bold-italic']
         italic = font_style in ['italic', 'bold-italic']
         img = create_multiline_text_image(text, PANEL_SIZE, color, bg_color, font_name, font_size, bold, italic)
+        
+        if GLOBAL_BRIGHTNESS < 1.0:
+            from PIL import ImageEnhance
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(GLOBAL_BRIGHTNESS)
+        
+        png_bytes = to_png_bytes(img)
+        
     elif image_path:
         full_path = ASSETS_DIR / image_path.replace("/assets/", "")
         if not full_path.exists():
             raise HTTPException(404, "Image not found")
-        img = resize_for_panel(full_path)
+        
+        # Check if it's an animated GIF
+        if full_path.suffix.lower() == '.gif':
+            with Image.open(full_path) as check_img:
+                is_animated_gif = getattr(check_img, 'is_animated', False)
+        
+        if is_animated_gif:
+            with open(full_path, 'rb') as f:
+                gif_bytes = f.read()
+            add_log("Sending animated GIF to all panels...", "info")
+        else:
+            img = resize_for_panel(full_path)
+            
+            if GLOBAL_BRIGHTNESS < 1.0:
+                from PIL import ImageEnhance
+                enhancer = ImageEnhance.Brightness(img)
+                img = enhancer.enhance(GLOBAL_BRIGHTNESS)
+            
+            png_bytes = to_png_bytes(img)
     else:
         raise HTTPException(400, "Provide image_path or text")
     
-    # Apply brightness
-    if GLOBAL_BRIGHTNESS < 1.0:
-        from PIL import ImageEnhance
-        enhancer = ImageEnhance.Brightness(img)
-        img = enhancer.enhance(GLOBAL_BRIGHTNESS)
-    
-    png_bytes = to_png_bytes(img)
-    
-    controller = PanelController()
-    macs = [(p.mac, p.name) for p in enabled]
-    results = await controller.send_same_to_all(macs, png_bytes)
-    
+    # Send to all panels
     success_count = 0
-    for mac, success, message in results:
-        panel = config.get_panel_by_mac(mac)
-        name = panel.name if panel else mac
+    results_list = []
+    
+    for panel in enabled:
+        # Auto-connect if not connected
+        if not manager.is_connected(panel.mac):
+            await manager.connect(panel.mac, name=panel.name)
+        
+        if is_animated_gif:
+            success = await manager.send_gif(panel.mac, gif_bytes)
+        else:
+            success = await manager.send_image(panel.mac, png_bytes)
+        
         if success:
-            add_log(f"✓ {name}", "success")
+            add_log(f"✓ {panel.name}", "success")
             success_count += 1
         else:
-            add_log(f"✗ {name}: {message}", "error")
+            add_log(f"✗ {panel.name}: send failed", "error")
+        
+        results_list.append((panel.mac, success, "OK" if success else "Failed"))
     
     add_log(f"Complete: {success_count}/{len(enabled)}", "info")
     
@@ -706,7 +1149,7 @@ async def send_to_all(
         "total": len(enabled),
         "results": [
             {"mac": mac, "success": success, "message": message}
-            for mac, success, message in results
+            for mac, success, message in results_list
         ]
     }
 
@@ -791,8 +1234,9 @@ async def send_to_grid(
 async def send_base64_to_single(
     panel_mac: str = Form(...),
     image_data: str = Form(...),
+    filename: str = Form(None),
 ):
-    """Send a base64-encoded image to a single panel."""
+    """Send a base64-encoded image to a single panel. Handles both static images and GIFs."""
     import base64
     
     config = load_config()
@@ -810,6 +1254,38 @@ async def send_base64_to_single(
             image_data = image_data.split(',')[1]
         
         img_bytes = base64.b64decode(image_data)
+        
+        # Check if it's a GIF (animated)
+        is_gif = (filename and filename.lower().endswith('.gif')) or img_bytes[:6] in [b'GIF87a', b'GIF89a']
+        
+        if is_gif:
+            # Check if animated
+            try:
+                test_img = Image.open(BytesIO(img_bytes))
+                is_animated = getattr(test_img, 'is_animated', False)
+                test_img.close()
+            except:
+                is_animated = False
+            
+            if is_animated:
+                add_log(f"Sending animated GIF to {panel.name}...", "info")
+                manager = get_manager()
+                
+                # Auto-connect if needed
+                if not manager.is_connected(panel.mac):
+                    if not await manager.connect(panel.mac, name=panel.name):
+                        raise HTTPException(500, f"Failed to connect to {panel.name}")
+                
+                success = await manager.send_gif(panel.mac, img_bytes)
+                
+                if success:
+                    add_log(f"✓ GIF sent to {panel.name}", "success")
+                    return {"status": "ok", "message": "GIF sent"}
+                else:
+                    add_log(f"✗ {panel.name}: GIF send failed", "error")
+                    return {"status": "error", "message": "GIF send failed"}
+        
+        # Static image handling
         img = Image.open(BytesIO(img_bytes)).convert('RGB')
         
         # Resize to panel size
@@ -840,8 +1316,9 @@ async def send_base64_to_single(
 @app.post("/api/send/base64/all")
 async def send_base64_to_all(
     image_data: str = Form(...),
+    filename: str = Form(None),
 ):
-    """Send a base64-encoded image to all enabled panels."""
+    """Send a base64-encoded image to all enabled panels. Handles both static images and GIFs."""
     import base64
     
     config = load_config()
@@ -858,6 +1335,37 @@ async def send_base64_to_all(
             image_data = image_data.split(',')[1]
         
         img_bytes = base64.b64decode(image_data)
+        
+        # Check if it's a GIF (animated)
+        is_gif = (filename and filename.lower().endswith('.gif')) or img_bytes[:6] in [b'GIF87a', b'GIF89a']
+        
+        if is_gif:
+            # Check if animated
+            try:
+                test_img = Image.open(BytesIO(img_bytes))
+                is_animated = getattr(test_img, 'is_animated', False)
+                test_img.close()
+            except:
+                is_animated = False
+            
+            if is_animated:
+                add_log(f"Sending animated GIF to {len(panels)} panels...", "info")
+                manager = get_manager()
+                results = []
+                
+                for panel in panels:
+                    # Auto-connect if needed
+                    if not manager.is_connected(panel.mac):
+                        await manager.connect(panel.mac, name=panel.name)
+                    
+                    success = await manager.send_gif(panel.mac, img_bytes)
+                    results.append({"mac": panel.mac, "name": panel.name, "success": success})
+                
+                success_count = sum(1 for r in results if r.get("success"))
+                add_log(f"✓ GIF sent to {success_count}/{len(panels)} panels", "success" if success_count else "warning")
+                return {"results": results}
+        
+        # Static image handling
         img = Image.open(BytesIO(img_bytes)).convert('RGB')
         img = img.resize((PANEL_SIZE, PANEL_SIZE), Image.Resampling.NEAREST)
         
