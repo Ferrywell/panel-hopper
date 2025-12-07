@@ -84,6 +84,10 @@ class PanelManager:
         self._safe_mode_active: bool = False
         self._safe_mode_adapter: Optional[str] = None
         
+        # Auto-save setting: automatically save to flash after sending
+        # DISABLED by default - causes issues with animations overwriting content
+        self._auto_save: bool = False
+        
         # Set up safe mode callback
         def on_safe_mode(adapter_address: str, adapter_name: str):
             self._safe_mode_active = True
@@ -102,13 +106,50 @@ class PanelManager:
     @property
     def adapter_name(self) -> str:
         """Get the current adapter name."""
-        return self._safe_mode_adapter or "Bluetooth Adapter"
+        if self._safe_mode_adapter:
+            return self._safe_mode_adapter
+        
+        # Try to detect the actual Bluetooth adapter on Windows
+        return self._detect_bluetooth_adapter()
+    
+    def _detect_bluetooth_adapter(self) -> str:
+        """Detect the Bluetooth adapter name on Windows."""
+        import subprocess
+        import sys
+        
+        if sys.platform != "win32":
+            return "Bluetooth Adapter"
+        
+        try:
+            # Use PowerShell to get Bluetooth devices
+            result = subprocess.run(
+                ['powershell', '-Command', 
+                 'Get-PnpDevice -Class Bluetooth | Where-Object {$_.Status -eq "OK" -and $_.FriendlyName -notlike "*Microsoft*" -and $_.FriendlyName -notlike "*RFCOMM*"} | Select-Object -First 1 -ExpandProperty FriendlyName'],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except Exception as e:
+            logger.debug(f"Could not detect Bluetooth adapter: {e}")
+        
+        return "Bluetooth Adapter"
     
     def reset_safe_mode(self):
         """Reset safe mode to try fast mode again."""
         self._safe_mode_active = False
         BleDisplaySession.reset_safe_mode()
         logger.info("Safe mode reset - will try fast mode on next connection")
+    
+    @property
+    def auto_save(self) -> bool:
+        """Check if auto-save is enabled."""
+        return self._auto_save
+    
+    @auto_save.setter
+    def auto_save(self, value: bool):
+        """Enable/disable auto-save after sending."""
+        self._auto_save = value
+        logger.info(f"Auto-save {'enabled' if value else 'disabled'}")
     
     # =========================================================================
     # Connection Monitoring
@@ -428,7 +469,7 @@ class PanelManager:
                 logger.error(f"[{panel.name}] Rotation error: {e}")
                 return False
     
-    async def send_image(self, mac: str, png_bytes: bytes, delay: float = None) -> bool:
+    async def send_image(self, mac: str, png_bytes: bytes, delay: float = None, auto_save: bool = None) -> bool:
         """
         Send an image to the panel.
         
@@ -436,6 +477,7 @@ class PanelManager:
             mac: Panel MAC address
             png_bytes: PNG image data (should be 32x32)
             delay: Delay between packets (default: 0.15)
+            auto_save: Auto-save to flash (default: use manager setting)
             
         Returns:
             True if image was sent successfully
@@ -445,6 +487,7 @@ class PanelManager:
             return False
         
         delay = delay or self._command_delay
+        should_save = auto_save if auto_save is not None else self._auto_save
         
         async with panel._lock:
             try:
@@ -456,6 +499,16 @@ class PanelManager:
                 panel.error = None
                 
                 logger.info(f"[{panel.name}] Image sent successfully")
+                
+                # Auto-save to flash so it persists after disconnect
+                if should_save:
+                    try:
+                        await asyncio.sleep(0.2)  # Small delay before save
+                        await panel.session.save_as_startup()
+                        logger.info(f"[{panel.name}] Auto-saved to flash")
+                    except Exception as save_err:
+                        logger.warning(f"[{panel.name}] Auto-save failed: {save_err}")
+                
                 return True
                 
             except Exception as e:
@@ -464,14 +517,19 @@ class PanelManager:
                 logger.error(f"[{panel.name}] Send image error: {e}")
                 return False
     
-    async def send_gif(self, mac: str, gif_bytes: bytes, delay: float = None) -> bool:
+    async def send_gif(self, mac: str, gif_bytes: bytes, delay: float = None, auto_save: bool = None) -> bool:
         """
         Send an animated GIF to the panel.
+        
+        NOTE: Auto-save is disabled for GIFs because the save commands
+        (EDIT_END) stop the animation and revert to the previous saved state.
+        GIFs use a different storage mechanism on the panel.
         
         Args:
             mac: Panel MAC address
             gif_bytes: GIF file bytes
             delay: Delay between frames (default: 0.15)
+            auto_save: Ignored for GIFs (always False)
             
         Returns:
             True if GIF was sent successfully
@@ -481,6 +539,7 @@ class PanelManager:
             return False
         
         delay = delay or self._command_delay
+        # NOTE: Auto-save is DISABLED for GIFs - the EDIT_END command stops the animation!
         
         async with panel._lock:
             try:
@@ -492,6 +551,7 @@ class PanelManager:
                     panel.last_command_time = datetime.now()
                     panel.error = None
                     logger.info(f"[{panel.name}] GIF sent successfully")
+                    # No auto-save for GIFs - it breaks the animation!
                 else:
                     panel.error = "GIF send failed"
                     logger.warning(f"[{panel.name}] GIF send failed")

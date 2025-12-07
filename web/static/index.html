@@ -2926,6 +2926,15 @@
             }
         }
         
+        // AID Flasher timing (Dutch specification):
+        // - Top lights ON: 600ms
+        // - Bottom lights ON: 600ms
+        // - All lights OFF: 800ms
+        // - Total cycle: 2000ms
+        const AID_TOP_DURATION = 600;
+        const AID_BOTTOM_DURATION = 600;
+        const AID_OFF_DURATION = 800;
+        
         function toggleFlashers(enabled) {
             flasherEnabled = enabled;
             
@@ -2935,53 +2944,68 @@
             }
             
             if (enabled) {
-                // Start flasher animation: bottom pair -> top pair -> all off
-                // FASTER: 300ms per phase (was 1000ms), 900ms total cycle
-                flasherState = 1;
+                // Start AID flasher animation with correct Dutch timing
+                // Phase 1: Top pair (600ms) -> Phase 2: Bottom pair (600ms) -> Phase 3: Off (800ms)
+                flasherState = 2;  // Start with top pair (phase 2 = top)
                 updateMatrixPreview();
                 
                 let phase = 0;
-                flasherInterval = setInterval(() => {
+                const runPhase = () => {
                     phase = (phase + 1) % 3;
-                    if (phase === 0) flasherState = 1;      // Bottom pair
-                    else if (phase === 1) flasherState = 2; // Top pair
-                    else flasherState = 0;                   // All off
+                    if (phase === 0) {
+                        flasherState = 2;  // Top pair ON
+                        flasherInterval = setTimeout(runPhase, AID_TOP_DURATION);
+                    } else if (phase === 1) {
+                        flasherState = 1;  // Bottom pair ON
+                        flasherInterval = setTimeout(runPhase, AID_BOTTOM_DURATION);
+                    } else {
+                        flasherState = 0;  // All OFF
+                        flasherInterval = setTimeout(runPhase, AID_OFF_DURATION);
+                    }
                     updateMatrixPreview();
-                }, 300); // 300ms per phase = faster blink
+                };
+                flasherInterval = setTimeout(runPhase, AID_TOP_DURATION);
             } else {
                 flasherState = 0;
                 updateMatrixPreview();
             }
         }
         
-        // Create animated GIF for matrix with flashers
+        // Create animated GIF for matrix with AID flashers
+        // Dutch AID timing: Top 600ms -> Bottom 600ms -> Off 800ms
         async function createFlasherGif() {
             if (!selectedMatrixSign) return null;
             
-            // Create 3 frames: bottom on, top on, both off
-            const frames = [];
             const size = 32;
             
-            for (let phase = 1; phase <= 3; phase++) {
-                const canvas = document.createElement('canvas');
-                canvas.width = size;
-                canvas.height = size;
-                const ctx = canvas.getContext('2d');
-                
-                // Draw sign with flasher in this phase
-                const flasherPhase = phase === 3 ? 0 : phase;
-                drawMatrixSign(ctx, selectedMatrixSign, size, true, flasherPhase);
-                
-                frames.push(canvas.toDataURL('image/png'));
-            }
+            // Frame 1: Top flashers ON (600ms)
+            const canvas1 = document.createElement('canvas');
+            canvas1.width = size;
+            canvas1.height = size;
+            drawMatrixSign(canvas1.getContext('2d'), selectedMatrixSign, size, true, 2);  // 2 = top
+            const frame1 = canvas1.toDataURL('image/png');
             
-            // Send frames to server to create GIF
+            // Frame 2: Bottom flashers ON (600ms)
+            const canvas2 = document.createElement('canvas');
+            canvas2.width = size;
+            canvas2.height = size;
+            drawMatrixSign(canvas2.getContext('2d'), selectedMatrixSign, size, true, 1);  // 1 = bottom
+            const frame2 = canvas2.toDataURL('image/png');
+            
+            // Frame 3: All flashers OFF (800ms)
+            const canvas3 = document.createElement('canvas');
+            canvas3.width = size;
+            canvas3.height = size;
+            drawMatrixSign(canvas3.getContext('2d'), selectedMatrixSign, size, true, 0);  // 0 = off
+            const frame3 = canvas3.toDataURL('image/png');
+            
+            // Send frames to server with individual durations
             const response = await fetch('/api/matrix/create-gif', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    frames: frames,
-                    delay: 300  // 300ms per frame
+                    frames: [frame1, frame2, frame3],
+                    durations: [AID_TOP_DURATION, AID_BOTTOM_DURATION, AID_OFF_DURATION]  // Different duration per frame
                 })
             });
             
@@ -3003,25 +3027,46 @@
             }
             
             document.getElementById('loading')?.classList.add('active');
+            addLog('Preparing matrix sign...', 'info');
             
             try {
                 // If flashers are enabled, send as animated GIF
                 if (flasherEnabled) {
-                    const gif = await createFlasherGif();
-                    if (gif) {
+                    addLog('Creating AID flasher GIF (3 frames)...', 'info');
+                    const gifBlob = await createFlasherGif();
+                    if (gifBlob) {
+                        // Convert blob to base64
+                        const reader = new FileReader();
+                        const base64Promise = new Promise((resolve) => {
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(gifBlob);
+                        });
+                        const gifBase64 = await base64Promise;
+                        
+                        // Send as base64 with .gif filename hint
                         const fd = new FormData();
-                        fd.append('file', gif, 'matrix_flashers.gif');
+                        fd.append('image_data', gifBase64);
+                        fd.append('filename', 'matrix_flashers.gif');
                         fd.append('panel_mac', selectedPanel);
-                        await fetch('/api/send/single', { method: 'POST', body: fd });
+                        
+                        addLog('Sending AID flasher GIF to panel...', 'info');
+                        const res = await fetch('/api/send/base64', { method: 'POST', body: fd });
+                        if (res.ok) {
+                            addLog('✓ AID flasher GIF sent!', 'success');
+                        } else {
+                            addLog('✗ Failed to send GIF', 'error');
+                        }
                     }
                 } else {
                     const fd = new FormData();
                     fd.append('image_data', matrixImageData);
                     fd.append('panel_mac', selectedPanel);
                     await fetch('/api/send/base64', { method: 'POST', body: fd });
+                    addLog('✓ Matrix sign sent!', 'success');
                 }
             } catch (err) {
                 console.error('Matrix send error:', err);
+                addLog('✗ Matrix send error: ' + err.message, 'error');
             }
             
             document.getElementById('loading')?.classList.remove('active');
@@ -3034,23 +3079,38 @@
             }
             
             document.getElementById('loading')?.classList.add('active');
+            addLog('Preparing matrix sign for all panels...', 'info');
             
             try {
                 // If flashers are enabled, send as animated GIF
                 if (flasherEnabled) {
-                    const gif = await createFlasherGif();
-                    if (gif) {
+                    addLog('Creating AID flasher GIF...', 'info');
+                    const gifBlob = await createFlasherGif();
+                    if (gifBlob) {
+                        // Convert blob to base64
+                        const reader = new FileReader();
+                        const base64Promise = new Promise((resolve) => {
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(gifBlob);
+                        });
+                        const gifBase64 = await base64Promise;
+                        
                         const fd = new FormData();
-                        fd.append('file', gif, 'matrix_flashers.gif');
-                        await fetch('/api/upload-and-send-all', { method: 'POST', body: fd });
+                        fd.append('image_data', gifBase64);
+                        fd.append('filename', 'matrix_flashers.gif');
+                        
+                        addLog('Sending AID flasher GIF to all panels...', 'info');
+                        await fetch('/api/send/base64/all', { method: 'POST', body: fd });
                     }
                 } else {
                     const fd = new FormData();
                     fd.append('image_data', matrixImageData);
                     await fetch('/api/send/base64/all', { method: 'POST', body: fd });
                 }
+                addLog('✓ Matrix sign sent to all!', 'success');
             } catch (err) {
                 console.error('Matrix send error:', err);
+                addLog('✗ Matrix send error: ' + err.message, 'error');
             }
             
             document.getElementById('loading')?.classList.remove('active');

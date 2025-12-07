@@ -749,6 +749,7 @@ async def get_panels_status():
         "panels": manager.list_panels(),
         "safe_mode": manager.safe_mode,
         "adapter_name": manager.adapter_name,
+        "auto_save": manager.auto_save,
     }
 
 
@@ -759,6 +760,15 @@ async def reset_safe_mode():
     manager.reset_safe_mode()
     add_log("BLE Safe Mode reset - will try fast mode", "info")
     return {"success": True}
+
+
+@app.post("/api/settings/auto-save")
+async def set_auto_save(enabled: bool = Form(...)):
+    """Enable/disable auto-save after sending images/GIFs."""
+    manager = get_manager()
+    manager.auto_save = enabled
+    add_log(f"Auto-save {'enabled' if enabled else 'disabled'}", "info")
+    return {"success": True, "auto_save": manager.auto_save}
 
 
 @app.post("/api/panels/scan")
@@ -1450,14 +1460,24 @@ async def upload_and_send_all(file: UploadFile = File(...)):
 
 @app.post("/api/matrix/create-gif")
 async def create_matrix_gif(data: dict):
-    """Create an animated GIF from matrix sign frames with flashers."""
+    """Create an animated GIF from matrix sign frames with flashers.
+    
+    Supports per-frame durations for AID flasher timing.
+    """
     import base64
     
     frames_data = data.get('frames', [])
-    delay = data.get('delay', 300)  # ms between frames
+    durations = data.get('durations', None)  # Per-frame durations
+    delay = data.get('delay', 300)  # Default delay if durations not provided
     
     if not frames_data or len(frames_data) < 2:
         raise HTTPException(400, "Need at least 2 frames")
+    
+    # Use per-frame durations if provided, otherwise use uniform delay
+    if durations and len(durations) == len(frames_data):
+        frame_durations = durations
+    else:
+        frame_durations = [delay] * len(frames_data)
     
     # Decode frames from base64
     frames = []
@@ -1468,14 +1488,14 @@ async def create_matrix_gif(data: dict):
         img = Image.open(BytesIO(img_bytes)).convert('P', palette=Image.Palette.ADAPTIVE, colors=256)
         frames.append(img)
     
-    # Create GIF
+    # Create GIF with per-frame durations
     output = BytesIO()
     frames[0].save(
         output,
         format='GIF',
         save_all=True,
         append_images=frames[1:],
-        duration=delay,
+        duration=frame_durations,  # List of durations per frame
         loop=0,  # Loop forever
         optimize=False,
         disposal=0

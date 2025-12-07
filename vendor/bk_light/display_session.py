@@ -376,24 +376,32 @@ class BleDisplaySession:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         await self._safe_disconnect()
 
-    async def send_png(self, png_bytes: bytes, delay: float = 0.2, set_static_mode: bool = False) -> None:
+    async def send_png(self, png_bytes: bytes, delay: float = 0.2, stop_animation: bool = True) -> None:
         """
         Send a PNG image to the panel.
         
         Based on iPixel BLE analysis:
-        1. Send CMD_EDIT_END (05 00 04 01 00) before image
-        2. Send image data (with header)
-        3. Optionally set display mode to static (only if set_static_mode=True)
+        1. Stop any running animation first (set display mode to static)
+        2. Send CMD_EDIT_END (05 00 04 01 00) before image
+        3. Send image data (with header)
         
         Args:
             png_bytes: PNG image data
             delay: Delay between operations
-            set_static_mode: If True, set display mode to 1 (static) after sending.
-                             Default False to not interrupt running animations.
+            stop_animation: If True (default), stop any running animation BEFORE sending.
+                           This prevents the animation from taking over after the image is sent.
         """
+        # IMPORTANT: Stop animation BEFORE sending image, not after!
+        # This prevents stored animations from taking over the display.
+        if stop_animation:
+            if self.log_notifications:
+                print("STOP_ANIMATION_BEFORE_SEND")
+            await self.set_display_mode(1)  # Static mode
+            await asyncio.sleep(0.2)
+        
         processed = adjust_image(png_bytes, self.rotation, self.brightness)
         frame = build_frame(processed)
-        await self.send_frame(frame, delay, set_static_mode=set_static_mode)
+        await self.send_frame(frame, delay, set_static_mode=False)
 
     async def send_frame(self, frame: bytes, delay: float = 0.2, set_static_mode: bool = False) -> None:
         """
@@ -539,7 +547,10 @@ class BleDisplaySession:
         Returns:
             True if save commands were acknowledged
         """
-        # Send end editing command first
+        # NOTE: We don't clear existing data here - the image should already be
+        # on screen and we just want to save it. Clearing would delete our image!
+        
+        # Send end editing command
         if self.log_notifications:
             print("EDIT_END")
         result1 = await self._send_command(CMD_EDIT_END)
